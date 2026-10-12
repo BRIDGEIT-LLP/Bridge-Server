@@ -10,19 +10,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to Azure VM
+      - name: Deploy to AWS EC2
         uses: appleboy/ssh-action@v1.0.3
 
         with:
-          host: ${{ secrets.AZURE_VM_HOST }}
-          username: ${{ secrets.AZURE_VM_USERNAME }}
-          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
 
           script: |
             set -e
 
-            export PATH="/home/bridge/.nvm/versions/node/v22.23.2/bin:$PATH"
+            export PATH="/home/ubuntu/.nvm/versions/node/v22.23.2/bin:$PATH"
 
             echo "Node version:"
             node -v
@@ -33,7 +33,7 @@ jobs:
             echo "PM2 version:"
             pm2 -v
 
-            cd /home/bridge/Bridge-Server
+            cd /home/ubuntu/Bridge-Server
 
             echo "Pulling latest UAT code..."
             git pull origin uat
