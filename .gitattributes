@@ -1,0 +1,3 @@
+# Bash scripts must stay LF — core.autocrlf=true would otherwise check them
+# out with CRLF on Windows, which breaks bash (stray \r on every line).
+*.sh text eol=lf

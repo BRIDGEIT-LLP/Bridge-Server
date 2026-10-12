@@ -1,0 +1,3 @@
+INSERT INTO public.subscription_plan (plan_name, plan_code, plan_benefits, validity_days, is_active, created_by, created_at, updated_at, is_deleted) VALUES
+    ('Monthly Plan', 'MONTHLY', ARRAY['Access to all connection suggestions', 'Up to 50 active connections per month', 'Deal Room with document sharing & chat', 'Email and in-app support'], 30, TRUE, 'd617302e-60a1-414c-8275-95a1cd1b9e7e', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE),
+    ('Yearly Plan', 'YEARLY', ARRAY['Access to all connection suggestions', 'Up to 50 active connections per month', 'Deal Room with document sharing & chat', 'Priority match suggestions', 'Email and in-app support'], 365, TRUE, 'd617302e-60a1-414c-8275-95a1cd1b9e7e', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE);

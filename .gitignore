@@ -1,0 +1,8 @@
+.env
+.env.uat
+node_modules/
+logs/
+migrations/
+seeder/
+CLAUDE.md
+.claude-reports/

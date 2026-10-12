@@ -1,0 +1,3 @@
+INSERT INTO public.subscription_plan_price_history (plan_id, old_price_monthly, new_price_monthly, old_price_yearly, new_price_yearly, currency, changed_by, effective_from, reason, created_at, updated_at) VALUES
+    ((SELECT id FROM public.subscription_plan WHERE plan_code = 'MONTHLY'), 799, 999, NULL, NULL, 'INR', 'd617302e-60a1-414c-8275-95a1cd1b9e7e', '2026-06-08T11:53:43.475Z', 'Annual price revision for inflation adjustment', '2026-06-08T11:53:43.475Z', '2026-06-08T11:53:43.475Z'),
+    ((SELECT id FROM public.subscription_plan WHERE plan_code = 'YEARLY'), 799, 999, 7999, 9999, 'INR', 'd617302e-60a1-414c-8275-95a1cd1b9e7e', '2026-06-08T11:53:43.475Z', 'Annual price revision for inflation adjustment', '2026-06-08T11:53:43.475Z', '2026-06-08T11:53:43.475Z');

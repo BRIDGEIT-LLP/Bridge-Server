@@ -1,0 +1,36 @@
+{
+    "success": true,
+    "data": {
+        "verified": true,
+        "gstin": "07BGKPA4107R1Z7",
+        "legalName": "ARVIND",
+        "tradeName": null,
+        "status": "Active",
+        "pan": "BGKPA4107R",
+        "businessNature": "Manufacturer",
+        "stateName": "Delhi",
+        "stateCode": "07",
+        "registrationDate": "30/01/2020",
+        "verificationDetails": {
+            "code": 200,
+            "timestamp": 1787032532548,
+            "data": {
+                "data": {
+                    "legalName": "ARVIND",
+                    "bussNature": "Manufacturer",
+                    "stateName": "Delhi",
+                    "validGstin": true,
+                    "stateCode": "07",
+                    "pan": "BGKPA4107R",
+                    "gstin": "07BGKPA4107R1Z7",
+                    "regStartDate": "30/01/2020",
+                    "status": "Active"
+                },
+                "status_cd": "1"
+            },
+            "transaction_id": "a2d80847-987a-4aaf-95e9-ef224ba454d8"
+        }
+    },
+    "message": "GSTIN verified successfully"
+}
+ 

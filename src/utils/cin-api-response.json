@@ -1,0 +1,50 @@
+{
+  "code": 200,
+  "timestamp": 1614696176218,
+  "transaction_id": "611335dc-8be4-40d1-8438-b86526462939",
+  "data": {
+    "company_master_data": {
+      "@entity": "in.co.sandbox.kyc.mca.company.master_data",
+      "company_category": "Company limited by Shares",
+      "email_id": "john@doe.com",
+      "class_of_company": "Private",
+      "date_of_last_agm": "30/09/2019",
+      "registered_address": "123, ABC LAKEVIEW TOWER OPPOSITE A COMPLEX, AHMEDABAD Ahmedabad GJ 380015 IN",
+      "registration_number": "999999",
+      "paid_up_capital(rs)": "100000",
+      "whether_listed_or_not": "Unlisted",
+      "suspended_at_stock_exchange": "-",
+      "cin": "U12300GJ2017PTC123456",
+      "company_subcategory": "Non-govt company",
+      "authorised_capital(rs)": "100000",
+      "company_status(for_efiling)": "Active",
+      "roc_code": "RoC-Ahmedabad",
+      "date_of_balance_sheet": "31/03/2019",
+      "date_of_incorporation": "09/06/2017",
+      "company_name": "JOHN DOE PRIVATE LIMITED",
+      "active_compliance": "ACTIVE Compliant",
+      "rd_region": "RD South East Region",
+      "balance_sheets": [],
+      "annual_returns": []
+    },
+    "charges": [
+      {
+        "@entity": "in.co.sandbox.kyc.mca.company.charges",
+        "date_of_creation": "06/02/2019",
+        "date_of_modification": "-",
+        "charge_amount": "2000000000",
+        "status": "Closed"
+      }
+    ],
+    "directors/signatory_details": [
+      {
+        "@entity": "in.co.sandbox.kyc.mca.company.directors_signatory_details",
+        "end_date": "-",
+        "din/pan": "99999999",
+        "begin_date": "09/06/2017",
+        "designation": "Director",
+        "name": "JOHN DOE"
+      }
+    ]
+  }
+}
