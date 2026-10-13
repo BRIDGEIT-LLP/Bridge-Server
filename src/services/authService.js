@@ -66,7 +66,7 @@ const createCompany = async (data) => {
             created_at: new Date(),
         };
         // TODO: consistant mobile and email id variables
-        const company = await companyRepository.createCompany(companyData, transaction);
+        const company = await companyRepository.createCompany(companyData, { transaction });
         const role = await companyRepository.findRoleMasterByCode(data.role);
 
         const userData = {

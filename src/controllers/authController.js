@@ -52,8 +52,17 @@ const companyRegistration = async (req, res, next) => {
             });
         }
 
+        // company_email is unique on both company and user, so check both before sending OTPs.
+        const existingUserRes = await authService.getUserByEmail(email);
+        if (!existingUserRes.success) {
+            return HttpResponse.error(res, {
+                message: existingUserRes.message,
+                statusCode: existingUserRes.statusCode
+            });
+        }
+
         const existingCompany = existingCompanyRes.data;
-        if (existingCompany) {
+        if (existingCompany || existingUserRes.data) {
             return HttpResponse.error(res, {message:USER_MESSAGES.EMAIL_ALREADY_EXISTS, statusCode:400});
         }
 
