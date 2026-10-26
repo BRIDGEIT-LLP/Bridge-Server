@@ -6,6 +6,8 @@ const smsClient = twilio(
     process.env.TWILIO_AUTH_TOKEN
 );
 
-const sgMailClient = sgMail.setApiKey(process.env.TWILIO_EMAIL_API_KEY);
+// setApiKey() returns undefined, so export the configured sgMail instance itself
+sgMail.setApiKey(process.env.TWILIO_EMAIL_API_KEY);
+const sgMailClient = sgMail;
 
 module.exports = { smsClient, sgMailClient };

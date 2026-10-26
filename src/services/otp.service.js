@@ -3,7 +3,7 @@ const redis = require("../configs/redis.js");
 const { OTP_MESSAGES } = require("../utils/constant.js");
 const { generateOTP } = require("../utils/Helper.js");
 const { smsClient } = require("../configs/twilio.js");
-const { sgMailClient } = require("../configs/twilio.js");
+const { sendEmail } = require("./email.service.js");
 const ServiceResponse = require("../utils/ServiceResponse.js");
 const { errorLogger } = require("../configs/logger.js");
 const { CHANNEL_TYPE } = require("../utils/constant.js")
@@ -24,18 +24,21 @@ const sendOtpToPhone = async (phone, otp) => {
     }
 };
 
+const OTP_EMAIL_SUBJECT = "Bridge OTP Verification";
+
+const buildOtpEmailHtml = (otp) => `<p>Your OTP is <strong>${otp}</strong></p>`;
+const buildOtpEmailText = (otp) => `Your OTP is ${otp}`;
+
 const sendOtpToEmail = async (email, otp) => {
     try {
-        const msg = {
+        // Message content is decided here; email.service only delivers it
+        // (provider comes from EMAIL_PROVIDER env, default SES).
+        await sendEmail({
             to: email,
-            from: {
-                name: "Bridge Support",
-                email: process.env.SENDGRID_EMAIL_FROM
-            },
-            subject: "Bridge OTP Verification",
-            html: `<p>Your OTP is <strong>${otp}</strong></p>`,
-        };
-        await sgMailClient.send(msg);
+            subject: OTP_EMAIL_SUBJECT,
+            html: buildOtpEmailHtml(otp),
+            text: buildOtpEmailText(otp),
+        });
     } catch (err) {
         errorLogger.error(`Error sending OTP to email ${email}:`, err);
         console.error(`Error sending OTP to email ${email}:`, err);
@@ -89,7 +92,7 @@ const sendOTP = async (channelType, channelId, purpose) => {
             // TODO:- Remove hardcoded phone number and use channelId instead after testing
             // await sendOtpToPhone("+91" + channelId, otp);
         } else {
-            // await sendOtpToEmail(channelId, otp);
+            await sendOtpToEmail(channelId, otp);
         }
 
         // 8. Increment OTP resent count
