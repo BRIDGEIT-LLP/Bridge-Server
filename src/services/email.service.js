@@ -3,8 +3,8 @@ const { sesClient } = require('../configs/ses.js');
 
 const { EMAIL_PROVIDERS, DEFAULT_EMAIL_PROVIDER, DEFAULT_EMAIL_FROM_NAME } = require('../utils/constant.js');
 
-const sendViaSes = async ({ to, subject, text, html, fromName }) => {
-    const source = process.env.SES_FROM_EMAIL;
+const sendViaSes = async ({ from, to, subject, text, html, fromName }) => {
+    const source = from;
 
     const command = new SendEmailCommand({
         Source: source,
@@ -22,12 +22,12 @@ const sendViaSes = async ({ to, subject, text, html, fromName }) => {
     return result.MessageId;
 };
 
-const sendViaTwilio = async ({ to, subject, text, html, fromName }) => {
+const sendViaTwilio = async ({ from, to, subject, text, html, fromName }) => {
     const { sgMailClient } = require('../configs/twilio.js');
 
     await sgMailClient.send({
         to,
-        from: { name: fromName, email: process.env.SENDGRID_EMAIL_FROM },
+        from: { name: fromName, email: from },
         subject,
         ...(text && { text }),
         ...(html && { html })
@@ -40,7 +40,7 @@ const PROVIDER_HANDLERS = {
 };
 
 
-const sendEmail = async ({ to, subject, text, html, fromName = DEFAULT_EMAIL_FROM_NAME, provider }) => {
+const sendEmail = async ({ from, to, subject, text, html, fromName = DEFAULT_EMAIL_FROM_NAME, provider }) => {
     const providerName = (provider || process.env.EMAIL_PROVIDER || DEFAULT_EMAIL_PROVIDER).toLowerCase();
     const handler = PROVIDER_HANDLERS[providerName];
 
@@ -55,7 +55,7 @@ const sendEmail = async ({ to, subject, text, html, fromName = DEFAULT_EMAIL_FRO
     }
 
     const recipients = Array.isArray(to) ? to : [to];
-    return handler({ to: recipients, subject, text, html, fromName });
+    return handler({ from, to: recipients, subject, text, html, fromName });
 };
 
 module.exports = { sendEmail, EMAIL_PROVIDERS };

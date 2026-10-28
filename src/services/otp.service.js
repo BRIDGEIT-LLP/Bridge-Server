@@ -24,7 +24,7 @@ const sendOtpToPhone = async (phone, otp) => {
     }
 };
 
-const OTP_EMAIL_SUBJECT = "Bridge OTP Verification";
+const OTP_EMAIL_SUBJECT = 'Bridge OTP Verification';
 
 const buildOtpEmailHtml = (otp) => `<p>Your OTP is <strong>${otp}</strong></p>`;
 const buildOtpEmailText = (otp) => `Your OTP is ${otp}`;
@@ -33,7 +33,9 @@ const sendOtpToEmail = async (email, otp) => {
     try {
         // Message content is decided here; email.service only delivers it
         // (provider comes from EMAIL_PROVIDER env, default SES).
+        const fromEmail = process.env.SES_FROM_EMAIL;
         await sendEmail({
+            from: fromEmail,
             to: email,
             subject: OTP_EMAIL_SUBJECT,
             html: buildOtpEmailHtml(otp),
