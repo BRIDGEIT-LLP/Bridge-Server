@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
             allowNull: false
         },
 
-        // Normalised (trimmed, lower-cased) — see Helper.normalizeEmail.
+        // Stored exactly as on the company record; no normalisation.
         email: {
             type: DataTypes.STRING,
             allowNull: false

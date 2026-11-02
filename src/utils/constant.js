@@ -504,7 +504,8 @@ const EMAIL_BLOCK_MESSAGES = {
     BLOCKED: 'This email has been blocked. Please contact support.',
     BLOCKED_AFTER_REJECTION: (limit) => `Your KYC was rejected ${limit} times and this account is now blocked. Please contact support.`,
     REJECTION_WARNING: (remaining) => `Your KYC was rejected. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before this account is blocked.`,
-    CHECK_FAILED: 'Unable to verify account status. Please try again later.'
+    CHECK_FAILED: 'Unable to verify account status. Please try again later.',
+    APPROVE_BLOCKED: 'The email of this company is blocked after repeated KYC rejections, so it cannot be approved.'
 };
 
 const TRIAL_DAYS_LIMITS = {

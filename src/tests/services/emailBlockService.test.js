@@ -52,10 +52,10 @@ describe('emailBlockService.getRejectionLimit', () => {
 describe('emailBlockService.checkEmail', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('normalises the email before the lookup', async () => {
+    test('looks up the email as given', async () => {
         blockedEmailRepository.findActiveByEmail.mockResolvedValue(null);
-        await emailBlockService.checkEmail('  A.B+x@Gmail.com ');
-        expect(blockedEmailRepository.findActiveByEmail).toHaveBeenCalledWith('ab@gmail.com', { transaction: undefined });
+        await emailBlockService.checkEmail('a@b.io');
+        expect(blockedEmailRepository.findActiveByEmail).toHaveBeenCalledWith('a@b.io', { transaction: undefined });
     });
 
     test('reports blocked when an active row exists', async () => {
@@ -83,19 +83,19 @@ describe('emailBlockService.checkEmail', () => {
 describe('emailBlockService.applyBlock', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('creates the block with the normalised email and revokes sessions in the same transaction', async () => {
+    test('creates the block with the email as given and revokes sessions in the same transaction', async () => {
         const transaction = { id: 'tx' };
         blockedEmailRepository.createIfNotActive.mockResolvedValue({ id: 9 });
 
         const block = await emailBlockService.applyBlock({
-            email: 'Founder@Acme.io', companyId: 'c1', userId: 'u1', reason: 'KYC_REJECTED_MAX',
+            email: 'Founder@Acme.io', companyId: 'c1', userIds: ['u1'], reason: 'KYC_REJECTED_MAX',
             blockedBy: 'admin-1', rejectionCount: 3, rejectionLimit: 3
         }, { transaction });
 
         expect(block).toEqual({ id: 9 });
         expect(blockedEmailRepository.createIfNotActive).toHaveBeenCalledWith(
             expect.objectContaining({
-                email: 'founder@acme.io', company_id: 'c1', user_id: 'u1',
+                email: 'Founder@Acme.io', company_id: 'c1', user_id: 'u1',
                 rejection_count: 3, rejection_limit: 3, blocked_by: 'admin-1'
             }),
             { transaction }
@@ -105,13 +105,22 @@ describe('emailBlockService.applyBlock', () => {
 
     test('does not try to revoke sessions when there is no user id', async () => {
         blockedEmailRepository.createIfNotActive.mockResolvedValue({ id: 1 });
-        await emailBlockService.applyBlock({ email: 'a@b.io', userId: null }, { transaction: {} });
+        await emailBlockService.applyBlock({ email: 'a@b.io', userIds: [] }, { transaction: {} });
         expect(userSessionRepository.revokeAllSessionsByUser).not.toHaveBeenCalled();
     });
 
+    test('revokes the sessions of every company user, not just the first', async () => {
+        blockedEmailRepository.createIfNotActive.mockResolvedValue({ id: 9 });
+        await emailBlockService.applyBlock({ email: 'a@b.io', userIds: ['u1', 'u2'] }, { transaction: {} });
+        expect(userSessionRepository.revokeAllSessionsByUser).toHaveBeenCalledTimes(2);
+        expect(userSessionRepository.revokeAllSessionsByUser).toHaveBeenCalledWith('u2', { transaction: {} });
+    });
+
     test('invalidateSessionCache drops the cached jti set', async () => {
-        await emailBlockService.invalidateSessionCache('u1');
+        await emailBlockService.invalidateSessionCache(['u1']);
         expect(sessionCacheRepository.invalidateUser).toHaveBeenCalledWith('u1');
+        await emailBlockService.invalidateSessionCache(['u1', 'u2']);
+        expect(sessionCacheRepository.invalidateUser).toHaveBeenCalledWith('u2');
     });
 });
 
@@ -123,6 +132,11 @@ describe('emailBlockService.buildKycRejectionWarning', () => {
 
     test('returns null when there has been no rejection', async () => {
         expect(await emailBlockService.buildKycRejectionWarning({ kyc_rejection_count: 0, kyc_status: KYC_STATUS.PENDING })).toBeNull();
+    });
+
+    test('returns null instead of throwing when the limit lookup fails', async () => {
+        adminConfigService.getTrialConfigValue.mockRejectedValue(new Error('redis down'));
+        expect(await emailBlockService.buildKycRejectionWarning({ kyc_rejection_count: 1, kyc_status: KYC_STATUS.REJECTED })).toBeNull();
     });
 
     test('returns null once KYC is approved, even though the counter keeps its value', async () => {

@@ -483,10 +483,11 @@ const login = async (req, res, next) => {
         const tokens = await tokenService.generateMfaAccessToken(existingCompany, role, existingUser, userType);
         const { accessToken } = tokens.data;
 
-        res.cookie(COOKIE_NAMES.MFA_TOKEN, accessToken, cookieOptions(env.JWT.MFA_EXPIRY));
-
         // Reminder on every sign-in from the first KYC rejection until approval.
+        // Built before any cookie is set; it never throws (returns null on error).
         const kycRejection = await emailBlockService.buildKycRejectionWarning(existingCompany);
+
+        res.cookie(COOKIE_NAMES.MFA_TOKEN, accessToken, cookieOptions(env.JWT.MFA_EXPIRY));
         return HttpResponse.success( res, {data: { role: role.role_code, maskedMobile, maskedEmail, ...(kycRejection && { kycRejection }) }, message: LOGIN_MESSAGES.VALID_CREDENTIALS })
     } catch (error) {
         console.error(error)
@@ -640,10 +641,11 @@ const verifyMfaOtp = async (req, res, next) => {
         });
         const { accessToken, refreshToken } = tokens.data;
 
+        const kycRejection = await emailBlockService.buildKycRejectionWarning(company);
+
         res.clearCookie(COOKIE_NAMES.MFA_TOKEN, clearCookieOptions());
         res.cookie(COOKIE_NAMES.ACCESS_TOKEN, accessToken, cookieOptions(env.JWT.ACCESS_EXPIRY));
         res.cookie(COOKIE_NAMES.REFRESH_TOKEN, refreshToken, cookieOptions(env.JWT.REFRESH_EXPIRY));
-        const kycRejection = await emailBlockService.buildKycRejectionWarning(company);
         return HttpResponse.success(res, { message: OTP_MESSAGES.OTP_VERIFY_SUCCESS, data: { userId: user.id, tokenType: TOKEN_TYPES.AUTH_ACCESS_TOKEN, redirectRoute: redirectRoute, isEmailVerified, isPhoneVerified, isKycVerified: company.is_kyc_verified, first_name: user.first_name, last_name: user.last_name, role: role.role_code, companyName: company.company_name, ...(kycRejection && { kycRejection }) }, statusCode: 200 });
     } catch (error) {
         errorLogger.error(error);

@@ -5,7 +5,6 @@ const sessionCacheRepository = require('../repositories/sessionCacheRepository')
 const adminConfigService = require('./adminConfigService');
 const { errorLogger } = require('../configs/logger');
 const ServiceResponse = require('../utils/ServiceResponse');
-const { normalizeEmail } = require('../utils/Helper');
 const {
     EMAIL_BLOCK_MESSAGES, KYC_REJECTION_LIMITS, TRIAL_CONFIG_LOOKUP_KEYS, KYC_STATUS
 } = require('../utils/constant');
@@ -43,7 +42,7 @@ const getRejectionLimit = async () => {
  */
 const checkEmail = async (email, { transaction } = {}) => {
     try {
-        const block = await blockedEmailRepository.findActiveByEmail(normalizeEmail(email), { transaction });
+        const block = await blockedEmailRepository.findActiveByEmail(email, { transaction });
         return ServiceResponse.success({ data: { blocked: Boolean(block), block } });
     } catch (error) {
         errorLogger.error(error);
@@ -57,12 +56,12 @@ const checkEmail = async (email, { transaction } = {}) => {
  * (the caller's transaction handler rolls back). After commit, call
  * invalidateSessionCache(userId).
  */
-const applyBlock = async ({ email, companyId, userId, reason, blockedBy, rejectionCount, rejectionLimit }, { transaction }) => {
+const applyBlock = async ({ email, companyId, userIds = [], reason, blockedBy, rejectionCount, rejectionLimit }, { transaction }) => {
     const block = await blockedEmailRepository.createIfNotActive({
-        email: normalizeEmail(email),
+        email,
         reason,
         company_id: companyId,
-        user_id: userId,
+        user_id: userIds[0] ?? null,
         rejection_count: rejectionCount,
         rejection_limit: rejectionLimit,
         blocked_at: new Date(),
@@ -72,7 +71,8 @@ const applyBlock = async ({ email, companyId, userId, reason, blockedBy, rejecti
 
     // authMiddleware already rejects revoked sessions on every request, which is
     // what stops a user who is signed in right now.
-    if (userId) {
+    // Every user on the company, not just the first.
+    for (const userId of userIds) {
         await userSessionRepository.revokeAllSessionsByUser(userId, { transaction });
     }
     return block;
@@ -80,8 +80,8 @@ const applyBlock = async ({ email, companyId, userId, reason, blockedBy, rejecti
 
 // Best effort (logs, never throws): drops the cached active-jti set so
 // isSessionJtiValid cannot serve a stale VALID for a session just revoked.
-const invalidateSessionCache = async (userId) => {
-    if (userId) {
+const invalidateSessionCache = async (userIds = []) => {
+    for (const userId of userIds) {
         await sessionCacheRepository.invalidateUser(userId);
     }
 };
@@ -93,6 +93,7 @@ const invalidateSessionCache = async (userId) => {
  * Returns null when there is nothing to warn about.
  */
 const buildKycRejectionWarning = async (company) => {
+  try {
     const count = company?.kyc_rejection_count ?? 0;
     if (count < 1 || company.kyc_status === KYC_STATUS.APPROVED) {
         return null;
@@ -108,6 +109,11 @@ const buildKycRejectionWarning = async (company) => {
         kycRejectionReason: company.kyc_status === KYC_STATUS.REJECTED ? (company.kyc_rejection_reason ?? null) : null,
         message: EMAIL_BLOCK_MESSAGES.REJECTION_WARNING(attemptsRemaining)
     };
+  } catch (error) {
+    // A reminder must never fail a sign-in.
+    errorLogger.error(error);
+    return null;
+  }
 };
 
 module.exports = { getRejectionLimit, checkEmail, applyBlock, invalidateSessionCache, buildKycRejectionWarning };

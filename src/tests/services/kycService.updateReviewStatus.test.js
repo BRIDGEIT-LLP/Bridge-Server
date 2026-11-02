@@ -95,13 +95,13 @@ describe('kycService.updateReviewStatus — reject / email block', () => {
 
         expect(emailBlockService.applyBlock).toHaveBeenCalledWith(
             expect.objectContaining({
-                email: 'Founder@Acme.io', companyId: 'company-1', userId: 'user-1',
+                email: 'Founder@Acme.io', companyId: 'company-1', userIds: ['user-1'],
                 reason: BLOCK_REASONS.KYC_REJECTED_MAX, blockedBy: 'admin-1', rejectionCount: 3, rejectionLimit: 3
             }),
             { transaction: mockTransaction }
         );
         expect(mockTransaction.commit).toHaveBeenCalled();
-        expect(emailBlockService.invalidateSessionCache).toHaveBeenCalledWith('user-1');
+        expect(emailBlockService.invalidateSessionCache).toHaveBeenCalledWith(['user-1']);
         expect(res.data).toMatchObject({ kycRejectionCount: 3, isEmailBlocked: true });
     });
 
@@ -161,6 +161,7 @@ describe('kycService.updateReviewStatus — approve', () => {
         companyRepository.getCompanyById.mockResolvedValue(baseCompany({ kyc_rejection_count: 2, kyc_status: KYC_STATUS.PENDING }));
         companyRepository.updateKycStatus.mockResolvedValue({ id: 'company-1', toJSON: () => ({ id: 'company-1' }) });
         companyRepository.getCompanyUser.mockResolvedValue([{ id: 'user-1' }]);
+        emailBlockService.checkEmail.mockResolvedValue({ success: true, data: { blocked: false } });
     });
 
     test('does not touch the rejection counter or the block', async () => {
@@ -171,5 +172,28 @@ describe('kycService.updateReviewStatus — approve', () => {
         expect(companyRepository.incrementKycRejectionCount).not.toHaveBeenCalled();
         expect(emailBlockService.applyBlock).not.toHaveBeenCalled();
         expect(userRepository.updateUser).toHaveBeenCalledWith({ is_active: true }, 'user-1', expect.objectContaining({ allowPrivileged: true }));
+    });
+
+    const approve = () => kycService.updateReviewStatus({ companyId: 'company-1', action: 'approve', adminId: 'admin-1' });
+
+    test('refuses (409) to approve a company whose email is blocked, and changes nothing', async () => {
+        emailBlockService.checkEmail.mockResolvedValue({ success: true, data: { blocked: true } });
+
+        const res = await approve();
+
+        expect(res.success).toBe(false);
+        expect(res.statusCode).toBe(409);
+        expect(mockTransaction.rollback).toHaveBeenCalled();
+        expect(companyRepository.updateKycStatus).not.toHaveBeenCalled();
+        expect(userRepository.updateUser).not.toHaveBeenCalled();
+    });
+
+    test('fails closed when the block lookup errors', async () => {
+        emailBlockService.checkEmail.mockResolvedValue({ success: false, message: 'x', statusCode: 503 });
+
+        const res = await approve();
+
+        expect(res.statusCode).toBe(503);
+        expect(companyRepository.updateKycStatus).not.toHaveBeenCalled();
     });
 });

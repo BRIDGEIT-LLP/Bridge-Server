@@ -234,6 +234,18 @@ const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId 
             return ServiceResponse.error({ message: KYC_MESSAGES.REVIEW_ACTION_FAILED, statusCode: 404 });
         }
 
+        // Approving would leave a KYC-approved company that still cannot sign in. Refuse
+        // until the block is lifted (fails closed if the lookup errors).
+        if (action === 'approve') {
+            const blockRes = await emailBlockService.checkEmail(existingCompany.company_email, { transaction });
+            if (!blockRes.success || blockRes.data.blocked) {
+                await transaction.rollback();
+                return blockRes.success
+                    ? ServiceResponse.error({ message: EMAIL_BLOCK_MESSAGES.APPROVE_BLOCKED, statusCode: 409 })
+                    : ServiceResponse.error({ message: blockRes.message, statusCode: blockRes.statusCode });
+            }
+        }
+
         const updatedCompany = await companyRepository.updateKycStatus(
             companyId,
             { isKycVerified, status, rejectionReason: reason },
@@ -241,7 +253,7 @@ const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId 
         );
 
         let kycRejectionCount = existingCompany.kyc_rejection_count ?? 0;
-        let blockedUserId = null;
+        let blockedUserIds = [];
         let isEmailBlocked = false;
 
         if (action === 'reject' && existingCompany.kyc_status !== KYC_STATUS.REJECTED) {
@@ -252,12 +264,12 @@ const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId 
 
             if (kycRejectionCount >= rejectionLimit) {
                 const companyUsers = await companyRepository.getCompanyUser(companyId);
-                blockedUserId = companyUsers[0]?.id ?? null;
+                blockedUserIds = companyUsers.map((u) => u.id);
 
                 await emailBlockService.applyBlock({
                     email: existingCompany.company_email,
                     companyId,
-                    userId: blockedUserId,
+                    userIds: blockedUserIds,
                     reason: BLOCK_REASONS.KYC_REJECTED_MAX,
                     blockedBy: adminId,
                     rejectionCount: kycRejectionCount,
@@ -298,7 +310,7 @@ const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId 
 
         // Best effort, after commit: Postgres is the source of truth.
         if (isEmailBlocked) {
-            await emailBlockService.invalidateSessionCache(blockedUserId);
+            await emailBlockService.invalidateSessionCache(blockedUserIds);
         }
 
         const data = typeof updatedCompany?.toJSON === 'function' ? updatedCompany.toJSON() : updatedCompany;

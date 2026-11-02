@@ -3,9 +3,9 @@ const { BlockedEmail } = require('../models');
 
 // "Active block" = is_deleted = false. Every read goes through here so that the
 // definition lives in one place (an unblock is a soft-delete of this row).
-const findActiveByEmail = async (normalizedEmail, { transaction } = {}) => {
+const findActiveByEmail = async (email, { transaction } = {}) => {
     return await BlockedEmail.findOne({
-        where: { email: normalizedEmail, is_deleted: false },
+        where: { email, is_deleted: false },
         transaction
     });
 };
