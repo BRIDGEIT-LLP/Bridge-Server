@@ -4,9 +4,10 @@ const kycInfoRepository = require('../repositories/kycInfoRepository');
 const companyRepository = require('../repositories/companyRepository');
 const userLimitConfigRepository = require('../repositories/userLimitConfigRepository');
 const adminConfigService = require('./adminConfigService');
+const emailBlockService = require('./emailBlockService');
 const { errorLogger } = require('../configs/logger');
 const ServiceResponse = require('../utils/ServiceResponse');
-const { KYC_MESSAGES, ENCRYPT_DECRYPT_MESSAGES, KYC_STATUS, KYC_DOC_TYPES, TRIAL_CONFIG_LOOKUP_KEYS, USER_LIMIT_DEFAULTS } = require('../utils/constant');
+const { KYC_MESSAGES, ENCRYPT_DECRYPT_MESSAGES, KYC_STATUS, KYC_DOC_TYPES, TRIAL_CONFIG_LOOKUP_KEYS, USER_LIMIT_DEFAULTS, BLOCK_REASONS, EMAIL_BLOCK_MESSAGES } = require('../utils/constant');
 const { decrypt } = require("../utils/encryption");
 const userRepository = require('../repositories/userRepository');
 
@@ -15,6 +16,24 @@ const createKycInfo = async (records) => {
     try {
         if (!Array.isArray(records) || records.length === 0) {
             return ServiceResponse.error({ message: 'records must be a non-empty array.', statusCode: 400 });
+        }
+
+        // Defence in depth: a blocked email must not get new documents into the review
+        // queue even if it still holds a token issued before the block.
+        const companyIdForBlockCheck = records[0].company_id;
+        const companyForBlockCheck = companyIdForBlockCheck
+            ? await companyRepository.getCompanyById(companyIdForBlockCheck)
+            : null;
+        if (companyForBlockCheck) {
+            const blockRes = await emailBlockService.checkEmail(companyForBlockCheck.company_email);
+            if (!blockRes.success) {
+                await transaction.rollback();
+                return blockRes;
+            }
+            if (blockRes.data.blocked) {
+                await transaction.rollback();
+                return ServiceResponse.error({ message: EMAIL_BLOCK_MESSAGES.BLOCKED, statusCode: 403 });
+            }
         }
 
         const now = new Date();
@@ -105,13 +124,18 @@ const getKycInfo = async ({ userId, companyId, roleId }) => {
         // reject never touches the per-document rows. Without this the user has no way
         // to see that they were rejected, or why.
         const company = await companyRepository.getCompanyById(companyId);
+        const maxRejections = await emailBlockService.getRejectionLimit();
+        const kycRejectionCount = company?.kyc_rejection_count ?? 0;
 
         return ServiceResponse.success({
             message: KYC_MESSAGES.FETCH_SUCCESS,
             data: {
                 records,
                 kycStatus: company?.kyc_status ?? null,
-                rejectionReason: company?.kyc_rejection_reason ?? null
+                rejectionReason: company?.kyc_rejection_reason ?? null,
+                kycRejectionCount,
+                maxRejections,
+                attemptsRemaining: Math.max(maxRejections - kycRejectionCount, 0)
             },
             statusCode: 200
         });
@@ -192,17 +216,56 @@ const updateDocumentStatus = async ({ kycInfoId, action, adminId }) => {
 };
 
 const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId }) => {
+    // Resolved before the transaction opens so config I/O (Redis/DB) is never done
+    // while the company row is locked.
+    const rejectionLimit = action === 'reject' ? await emailBlockService.getRejectionLimit() : null;
+
     const transaction = await sequelize.transaction();
     try {
         const status = action === 'approve' ? KYC_STATUS.APPROVED : KYC_STATUS.REJECTED;
         const reason = action === 'reject' ? (rejectionReason ?? null) : null;
         const isKycVerified = status === KYC_STATUS.APPROVED ? true : false;
 
+        // Row lock: serialises concurrent reviews of the same company so the
+        // "already rejected?" check below and the counter increment are consistent.
+        const existingCompany = await companyRepository.getCompanyById(companyId, { transaction, lock: true });
+        if (!existingCompany) {
+            await transaction.rollback();
+            return ServiceResponse.error({ message: KYC_MESSAGES.REVIEW_ACTION_FAILED, statusCode: 404 });
+        }
+
         const updatedCompany = await companyRepository.updateKycStatus(
             companyId,
             { isKycVerified, status, rejectionReason: reason },
             { transaction }
         );
+
+        let kycRejectionCount = existingCompany.kyc_rejection_count ?? 0;
+        let blockedUserId = null;
+        let isEmailBlocked = false;
+
+        if (action === 'reject' && existingCompany.kyc_status !== KYC_STATUS.REJECTED) {
+            // Only a transition into Rejected is a new strike — re-submitting the same
+            // rejection (double click, retry) must not burn another attempt.
+            const counted = await companyRepository.incrementKycRejectionCount(companyId, { transaction });
+            kycRejectionCount = counted.kyc_rejection_count;
+
+            if (kycRejectionCount >= rejectionLimit) {
+                const companyUsers = await companyRepository.getCompanyUser(companyId);
+                blockedUserId = companyUsers[0]?.id ?? null;
+
+                await emailBlockService.applyBlock({
+                    email: existingCompany.company_email,
+                    companyId,
+                    userId: blockedUserId,
+                    reason: BLOCK_REASONS.KYC_REJECTED_MAX,
+                    blockedBy: adminId,
+                    rejectionCount: kycRejectionCount,
+                    rejectionLimit
+                }, { transaction });
+                isEmailBlocked = true;
+            }
+        }
 
         if (action === 'approve') {
             const user = await companyRepository.getCompanyUser(companyId);
@@ -232,7 +295,20 @@ const updateReviewStatus = async ({ companyId, action, rejectionReason, adminId 
         }
 
         await transaction.commit();
-        return ServiceResponse.success({ message: KYC_MESSAGES.REVIEW_ACTION_SUCCESS, data: updatedCompany, statusCode: 200 });
+
+        // Best effort, after commit: Postgres is the source of truth.
+        if (isEmailBlocked) {
+            await emailBlockService.invalidateSessionCache(blockedUserId);
+        }
+
+        const data = typeof updatedCompany?.toJSON === 'function' ? updatedCompany.toJSON() : updatedCompany;
+        return ServiceResponse.success({
+            message: KYC_MESSAGES.REVIEW_ACTION_SUCCESS,
+            data: action === 'reject'
+                ? { ...data, kycRejectionCount, maxRejections: rejectionLimit, isEmailBlocked }
+                : data,
+            statusCode: 200
+        });
     } catch (error) {
         await transaction.rollback();
         errorLogger.error(error);

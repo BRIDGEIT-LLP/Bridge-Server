@@ -349,7 +349,9 @@ const getKycDocs = async (req, res) => {
             return HttpResponse.error(res, { message: getKycInfoServiceRes.message, statusCode: getKycInfoServiceRes.statusCode });
         }
 
-        const { records: kycInfo, kycStatus, rejectionReason } = getKycInfoServiceRes.data;
+        const {
+            records: kycInfo, kycStatus, rejectionReason, kycRejectionCount, maxRejections, attemptsRemaining
+        } = getKycInfoServiceRes.data;
 
         const decrypedRecords = kycInfo.map(record => {
             
@@ -381,7 +383,10 @@ const getKycDocs = async (req, res) => {
 
         return HttpResponse.success(res, {
             message: getKycInfoServiceRes.message,
-            data: { docDetails: preparedRes, submissionTime: submissionTime, expiryTime: expiryTime, kycStatus, rejectionReason },
+            data: {
+                docDetails: preparedRes, submissionTime: submissionTime, expiryTime: expiryTime, kycStatus, rejectionReason,
+                kycRejectionCount, maxRejections, attemptsRemaining
+            },
             statusCode: 200
         });
 

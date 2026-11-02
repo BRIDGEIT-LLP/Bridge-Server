@@ -9,6 +9,9 @@ jest.mock('../../repositories/userRepository', () => ({
 }));
 
 jest.mock('../../repositories/companyRepository', () => ({}));
+jest.mock('../../services/emailBlockService', () => ({
+    getRejectionLimit: jest.fn().mockResolvedValue(3)
+}));
 jest.mock('../../repositories/connectionRepository', () => ({}));
 jest.mock('../../services/gstVerificationService', () => ({}));
 jest.mock('../../services/cinVerificationService', () => ({}));

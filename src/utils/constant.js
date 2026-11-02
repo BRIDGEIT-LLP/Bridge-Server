@@ -487,6 +487,26 @@ const LOGIN_LOCKOUT_LIMITS = {
     LOCKOUT_DURATION_MINUTES: 15
 };
 
+// The live limit is read from trial_config_master (lookup kyc_max_rejections);
+// DEFAULT_MAX_REJECTIONS is the fallback when that row is missing/invalid, and
+// MIN/MAX bound what the config API accepts.
+const KYC_REJECTION_LIMITS = {
+    DEFAULT_MAX_REJECTIONS: 3,
+    MIN: 1,
+    MAX: 10
+};
+
+const BLOCK_REASONS = {
+    KYC_REJECTED_MAX: 'KYC_REJECTED_MAX'
+};
+
+const EMAIL_BLOCK_MESSAGES = {
+    BLOCKED: 'This email has been blocked. Please contact support.',
+    BLOCKED_AFTER_REJECTION: (limit) => `Your KYC was rejected ${limit} times and this account is now blocked. Please contact support.`,
+    REJECTION_WARNING: (remaining) => `Your KYC was rejected. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before this account is blocked.`,
+    CHECK_FAILED: 'Unable to verify account status. Please try again later.'
+};
+
 const TRIAL_DAYS_LIMITS = {
     FREE: 7
 };
@@ -495,7 +515,8 @@ const TRIAL_CONFIG_LOOKUP_KEYS = {
     FREE_CONNECTION_LIMIT: 'free_trial_connection_limit',
     PREMIUM_CONNECTION_LIMIT: 'premium_connection_limit',
     AWS_SERVICE_ENABLED: 'aws_service_enabled',
-    FREE_TRIAL_DAY: 'free_trial_day'
+    FREE_TRIAL_DAY: 'free_trial_day',
+    KYC_MAX_REJECTIONS: 'kyc_max_rejections'
 };
 
 const CONNECTION_MESSAGES = {
@@ -836,5 +857,6 @@ module.exports = { OTP_MESSAGES, OTP_PURPOSE, REGISTRATION_MESSAGES, AUTH_MESSAG
     SUBSCRIPTION_PLAN_MESSAGES,
     DATA_TYPES, UNITS, ADMIN_CONFIG_MESSAGES, REDIS_BASE_KEYS, USER_SUSPENSION_MESSAGES,
     ADMIN_MANAGEMENT_MESSAGES, ADMIN_STATUS, ADMIN_ACTIVITY_ACTIONS, ADMIN_PERMISSION_KEYS, DASHBOARD_MESSAGES,
-    ADMIN_PROFILE_MESSAGES, ROLE_SWITCH_MESSAGES, ADMIN_USER_DETAIL_MESSAGES, LOGIN_LOCKOUT_LIMITS
+    ADMIN_PROFILE_MESSAGES, ROLE_SWITCH_MESSAGES, ADMIN_USER_DETAIL_MESSAGES, LOGIN_LOCKOUT_LIMITS,
+    KYC_REJECTION_LIMITS, BLOCK_REASONS, EMAIL_BLOCK_MESSAGES
 };

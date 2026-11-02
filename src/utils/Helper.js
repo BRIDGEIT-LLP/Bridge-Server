@@ -33,6 +33,25 @@ const maskEmail = (email) => {
   return `${local[0]}${".".repeat(hidden)}${local.slice(-4)}@${domain}`;
 }
 
+// Canonical form of an email for the blocked_email table: trimmed, lower-cased,
+// and Gmail aliases collapsed (dots ignored, +suffix dropped, googlemail.com ==
+// gmail.com) so a blocked address cannot be bypassed by re-typing it.
+const normalizeEmail = (email) => {
+    if (typeof email !== 'string') return '';
+    const trimmed = email.trim().toLowerCase();
+    const at = trimmed.lastIndexOf('@');
+    if (at < 1) return trimmed;
+
+    let local = trimmed.slice(0, at);
+    let domain = trimmed.slice(at + 1);
+
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+        domain = 'gmail.com';
+        local = local.split('+')[0].replace(/\./g, '');
+    }
+    return `${local}@${domain}`;
+};
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isValidUUID = (uuid) => {
@@ -99,6 +118,7 @@ module.exports = {
     waterMarkFunction,
     maskPhone,
     maskEmail,
+    normalizeEmail,
     isValidUUID,
     formatValue
 };
