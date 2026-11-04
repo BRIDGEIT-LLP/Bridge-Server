@@ -26,3 +26,7 @@ VALUES('expiry_notification', 'true', 'true', 'boolean', 'flag', 'Expiry Notific
 INSERT INTO public.trial_config_master
 (lookup, value, default_value, data_type, unit, description, created_by, created_at)
 VALUES('aws_service_enabled', 'true', 'true', 'boolean', 'flag', 'AWS Service Enabled - indicates if AWS services are enabled', (select id from "admin" a where a.email = 'super_admin@test.com'), now());
+
+INSERT INTO public.trial_config_master
+(lookup, value, default_value, data_type, unit, description, created_by, created_at)
+VALUES('kyc_max_rejections', '3', '3', 'integer', 'number', 'Number of final KYC rejections after which the company email is blocked', (select id from "admin" a where a.email = 'super_admin@test.com'), now());

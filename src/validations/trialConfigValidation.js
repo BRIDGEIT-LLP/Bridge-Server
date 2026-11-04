@@ -2,6 +2,7 @@
 
 const Joi = require('joi');
 const HttpResponse = require('../utils/HttpResponse');
+const { KYC_REJECTION_LIMITS } = require('../utils/constant');
 
 const updateTrialConfigSchema = Joi.object({
     trialConfig: Joi.object({
@@ -34,6 +35,12 @@ const updateTrialConfigSchema = Joi.object({
         }),
         aws_service_enabled: Joi.boolean().messages({
             'boolean.base': 'aws_service_enabled must be a boolean'
+        }),
+        kyc_max_rejections: Joi.number().integer().min(KYC_REJECTION_LIMITS.MIN).max(KYC_REJECTION_LIMITS.MAX).messages({
+            'number.base': 'kyc_max_rejections must be a number',
+            'number.integer': 'kyc_max_rejections must be an integer',
+            'number.min': `kyc_max_rejections must be at least ${KYC_REJECTION_LIMITS.MIN}`,
+            'number.max': `kyc_max_rejections must not exceed ${KYC_REJECTION_LIMITS.MAX}`
         })
     }).min(1).required().messages({
         'object.base': 'trialConfig must be an object',

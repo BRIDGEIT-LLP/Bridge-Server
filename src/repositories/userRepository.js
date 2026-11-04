@@ -242,6 +242,11 @@ const getUserKycDocs = async () => {
             c.kyc_status,
             c.is_kyc_verified,
             c.kyc_rejection_reason,
+            c.kyc_rejection_count,
+            EXISTS (
+                SELECT 1 FROM blocked_email b
+                WHERE b.company_id = c.id AND b.is_deleted = false
+            ) AS is_email_blocked,
             k.id AS kyc_id,
             k.document_type,
             k.document_number,

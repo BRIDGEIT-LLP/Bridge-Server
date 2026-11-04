@@ -90,10 +90,22 @@ const markKycUploaded = async (companyId, { transaction } = {}) => {
     return updatedCompany;
 };
 
-const getCompanyById = async (companyId) => {
+// `lock` takes a row lock (SELECT ... FOR UPDATE) — only meaningful with a transaction.
+const getCompanyById = async (companyId, { transaction, lock } = {}) => {
     return await Company.findOne({
-        where: { id: companyId, is_deleted: false }
+        where: { id: companyId, is_deleted: false },
+        transaction,
+        lock: lock && transaction ? transaction.LOCK.UPDATE : undefined
     });
+};
+
+// Atomic so concurrent rejections cannot lose an increment.
+const incrementKycRejectionCount = async (companyId, { transaction } = {}) => {
+    const [, [updatedCompany]] = await Company.update(
+        { kyc_rejection_count: sequelize.literal('kyc_rejection_count + 1') },
+        { where: { id: companyId }, transaction, returning: true }
+    );
+    return updatedCompany;
 };
 
 const getDefaultCompanyIdByUserId = async (userId) => {
@@ -241,6 +253,7 @@ module.exports = {
     markProfileCompleted,
     markDefaultProfileCompleted,
     markKycUploaded,
+    incrementKycRejectionCount,
     updateCompanyContact,
     updateCompanyIdentifiers,
     incrementFailedLoginAttempts,

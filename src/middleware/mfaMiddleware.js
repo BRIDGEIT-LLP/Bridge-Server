@@ -1,8 +1,9 @@
 'use strict';
 const { errorLogger } = require('../configs/logger');
-const { AUTH_MESSAGES, TOKEN_TYPES } = require('../utils/constant');
+const { AUTH_MESSAGES, TOKEN_TYPES, EMAIL_BLOCK_MESSAGES } = require('../utils/constant');
+const emailBlockService = require('../services/emailBlockService');
 const HttpResponse = require('../utils/HttpResponse');
-const { verifyAccessToken, COOKIE_NAMES } = require('../utils/token');
+const { verifyAccessToken, COOKIE_NAMES, clearCookieOptions } = require('../utils/token');
 /**
  * Middleware for the login MFA flow (select-channel / verify-otp / resend-otp).
  *
@@ -12,7 +13,7 @@ const { verifyAccessToken, COOKIE_NAMES } = require('../utils/token');
  * by the application's authMiddleware. Once MFA passes, verify-otp exchanges it
  * for the full AUTH_ACCESS_TOKEN pair. Mirrors resetPasswordMiddleware.
  */
-const mfaMiddleware = (req, res, next) => {
+const mfaMiddleware = async (req, res, next) => {
     try {
         const token = req.cookies?.[COOKIE_NAMES.MFA_TOKEN];
         if (!token) {
@@ -29,6 +30,17 @@ const mfaMiddleware = (req, res, next) => {
                 message: AUTH_MESSAGES.INVALID_CREDENTIALS,
                 statusCode: 401
             });
+        }
+
+        // A blocked email must not complete the OTP step with a token issued before
+        // the block. Fails closed: a lookup error stops the request too.
+        const blockRes = await emailBlockService.checkEmail(decoded.email);
+        if (!blockRes.success) {
+            return HttpResponse.error(res, { message: blockRes.message, statusCode: blockRes.statusCode });
+        }
+        if (blockRes.data.blocked) {
+            res.clearCookie(COOKIE_NAMES.MFA_TOKEN, clearCookieOptions());
+            return HttpResponse.error(res, { message: EMAIL_BLOCK_MESSAGES.BLOCKED, statusCode: 403 });
         }
 
         // Attach decoded payload to request object (same fields the MFA

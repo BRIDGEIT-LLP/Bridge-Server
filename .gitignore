@@ -6,3 +6,4 @@ migrations/
 seeder/
 CLAUDE.md
 .claude-reports/
+claude_pr_reports
