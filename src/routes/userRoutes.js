@@ -10,6 +10,10 @@ const { PERMISSIONS } = require('../utils/constant');
 // GET /api/v1/users/dashboard — role-specific stat cards for the user dashboard
 router.get('/dashboard', authMiddleware, authorize(PERMISSIONS.USER.VIEW_DASHBOARD), dashboardController.getUserDashboard);
 
+// GET /api/v1/users/dashboard/home — S10 Home screen widgets (top introductions,
+// requests for you, deal rooms, monthly request counter, dummy Vouch data)
+router.get('/dashboard/home', authMiddleware, authorize(PERMISSIONS.USER.VIEW_DASHBOARD), dashboardController.getUserDashboardHome);
+
 // POST /api/v1/users — create a user profile (requires valid JWT)
 router.post('/build-profile', authMiddleware, authorize(PERMISSIONS.USER.BUILD_PROFILE), userController.createUserProfile);
 
