@@ -1,7 +1,7 @@
 'use strict';
 const { User, UserProfileFieldMaster, sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
-const { CONNECTION_BLOCKING_STATUSES, KYC_STATUS, KYC_DOC_TYPES } = require('../utils/constant');
+const { CONNECTION_BLOCKING_STATUSES, KYC_STATUS, KYC_DOC_TYPES, KYC_REQUIRED_DOCS } = require('../utils/constant');
 
 /**
  * Columns a self-service profile request must never write. Identity, secrets,
@@ -316,7 +316,10 @@ const searchUsers = async (searchQuery, searchableRoles = [], excludeUserId, vie
 
     replacements.approvedStatus = KYC_STATUS.APPROVED;
     replacements.kycDocTypes = KYC_DOC_TYPES;
-    replacements.kycDocTypeCount = KYC_DOC_TYPES.length;
+    // How many approved documents each role needs before it shows up in search.
+    replacements.b2bDocCount = KYC_REQUIRED_DOCS.B2B.length;
+    replacements.startupDocCount = KYC_REQUIRED_DOCS.STARTUP.length;
+    replacements.investorDocCount = KYC_REQUIRED_DOCS.INVESTOR.length;
 
     const hasViewer = Boolean(viewerUserId && viewerRoleId);
     let connectionSelect = 'NULL AS connection_status';
@@ -379,7 +382,11 @@ const searchUsers = async (searchQuery, searchableRoles = [], excludeUserId, vie
                     AND k.is_deleted IS NOT TRUE
                     AND k.status = :approvedStatus
                     AND k.document_type IN (:kycDocTypes)
-            ) = :kycDocTypeCount
+            ) >= CASE crm.role_code
+                WHEN 'B2B' THEN :b2bDocCount
+                WHEN 'STARTUP' THEN :startupDocCount
+                ELSE :investorDocCount
+            END
             AND (${wordConditions})
             ${roleFilter}
             ${excludeFilter}
@@ -418,7 +425,7 @@ const getUserCompanyRole = async (userId, companyId, roleId) => {
 const getUserCompanyRoleByCode = async (userId, companyId, roleCode) => {
     const rows = await sequelize.query(
         `SELECT cur.id AS company_user_role_id, cur.role_id, cur.company_id, cur.status,
-            cur.rejection_reason, cur.is_profile_completed, crm.role_name, crm.role_code
+            cur.rejection_reason, cur.is_profile_completed, cur.draft_step, crm.role_name, crm.role_code
         FROM company_user_role cur
         JOIN company_role_master crm ON crm.id = cur.role_id
         WHERE cur.user_id = :userId

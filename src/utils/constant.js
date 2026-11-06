@@ -42,6 +42,31 @@ const CIN_MESSAGES = {
     ALREADY_SET: 'CIN Number cannot be changed once it has been saved.'
 };
 
+const BUSINESS_CHECK_MESSAGES = {
+    SAVED: 'Business details saved successfully',
+    FETCHED: 'Business details fetched successfully',
+    FETCH_FAILED: 'Could not fetch business details. Please try again.',
+    SAVE_FAILED: 'Could not save business details. Please try again.',
+    INVALID_PAN: 'pan_number must be 5 letters, 4 digits, then 1 letter (e.g. ABCDE1234F)',
+    PAN_LOCKED: 'PAN has already been approved and cannot be changed.',
+    ROLE_NOT_SUPPORTED: 'Business check is not available for this role.',
+    B2B_NOT_VERIFIED: 'GST and CIN must be verified at registration before continuing.'
+};
+
+// Registration steps whose "Save as draft" is stored server-side, and where a signed-in user resumes.
+const DRAFT_STEPS = ['business', 'profile', 'intent', 'documents', 'review'];
+const DRAFT_STEP_ROUTES = {
+    business: '/registration/business-check',
+    profile: '/registration/complete-profile',
+    intent: '/registration/intent',
+    documents: '/registration/document-upload',
+    review: '/registration/review'
+};
+const DRAFT_MESSAGES = {
+    INVALID_STEP: `step must be one of: ${DRAFT_STEPS.join(', ')}`,
+    SAVED: 'Draft saved successfully'
+};
+
 const AUTH_MESSAGES = {
     ACCESS_TOKEN_UNAUTHORIZED: 'Unauthorized: No access token provided',
     FORBIDDEN: 'Forbidden',
@@ -112,6 +137,15 @@ const KYC_MESSAGES = {
     REVIEW_ACTION_FAILED: 'Error encountered while updating KYC review status',
     DOCUMENT_NOT_FOUND: 'KYC document not found',
     DUPLICATE_SUBMISSION: 'This document was already submitted. Please refresh and try again.',
+    EMPTY_PAYLOAD: 'Send at least one KYC document.',
+    REQUIREMENTS_FETCHED: 'KYC requirements fetched successfully',
+    ROLE_NOT_SUPPORTED: 'KYC documents are not available for this role.',
+    INVALID_DOC_TYPE: (type) => `${type} is not a KYC document for your role.`,
+    FILE_REQUIRED: (type, side) => `${type}: the ${side} file is required.`,
+    NUMBER_REQUIRED: (type) => `${type}: the document number is required.`,
+    NUMBER_INVALID: (type) => `${type}: the document number is not valid.`,
+    PAN_MISMATCH: 'PAN number does not match the one entered on the Business step.',
+    IDENTIFIER_MISSING: (type) => `${type}: no verified number is on record for your company yet.`,
 };
 
 const ENCRYPT_DECRYPT_MESSAGES = {
@@ -214,7 +248,35 @@ const CHANNEL_TYPE = {
     PHONE: 'PHONE'
 };
 
-const KYC_DOC_TYPES = ['AADHAAR', 'PAN'];
+// Every document type stored in kyc_info (these go to the kyc/ S3 folder and show in KYC review).
+const KYC_DOC_TYPES = ['AADHAAR', 'PAN', 'GST_CERTIFICATE', 'INCORPORATION_CERTIFICATE', 'PITCH_DECK'];
+
+// Documents each role must have uploaded (file attached) before the company counts as KYC-uploaded.
+// Mirrors the registration "Documents" step. Keys are company_role_master.role_code.
+const KYC_REQUIRED_DOCS = {
+    B2B: ['GST_CERTIFICATE', 'INCORPORATION_CERTIFICATE', 'PAN'],
+    STARTUP: ['PAN', 'AADHAAR', 'INCORPORATION_CERTIFICATE', 'PITCH_DECK'],
+    INVESTOR: ['PAN', 'AADHAAR']
+};
+
+// Document types whose number is the company's own verified identifier, not something typed per upload.
+const KYC_COMPANY_NUMBER_FIELD = {
+    GST_CERTIFICATE: 'gst_number',
+    INCORPORATION_CERTIFICATE: 'cin_number'
+};
+
+// What the Documents step shows for each document type. 'numberSource': 'user' = typed by the user
+// (PAN comes from the Business step), 'company' = the company's verified GSTIN/CIN, 'none' = no number.
+const IMAGE_MIME = ['image/png', 'image/jpeg'];
+const KYC_DOC_SPECS = {
+    PAN: { label: 'PAN card', numberLabel: 'PAN number', numberSource: 'user', sides: ['front'], mimeTypes: IMAGE_MIME, maxSizeMB: 5 },
+    AADHAAR: { label: 'Aadhaar card', numberLabel: 'Aadhaar number', numberSource: 'user', sides: ['front', 'back'], mimeTypes: IMAGE_MIME, maxSizeMB: 5 },
+    GST_CERTIFICATE: { label: 'GST registration certificate', numberLabel: 'GSTIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 20 },
+    INCORPORATION_CERTIFICATE: { label: 'Certificate of incorporation', numberLabel: 'CIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 20 },
+    PITCH_DECK: { label: 'Pitch deck', numberLabel: null, numberSource: 'none', sides: ['front'], mimeTypes: ['application/pdf'], maxSizeMB: 20 }
+};
+// Role-specific wording for the same document.
+const KYC_DOC_LABEL_OVERRIDES = { B2B: { PAN: { label: 'Company PAN card', numberLabel: 'Company PAN number' } } };
 
 const DEFAULT_KYC_VERIFICATION_APPROVAL_TIME = 24;
 
@@ -843,7 +905,7 @@ const REDIS_BASE_KEYS = {
 };
 
 module.exports = { OTP_MESSAGES, OTP_PURPOSE, REGISTRATION_MESSAGES, AUTH_MESSAGES, ROLE_FIELD_METADATA_MESSAGES,
-    USER_MESSAGES, S3_FILE_TYPE, KYC_DOC_TYPES, KYC_MESSAGES, GST_MESSAGES, CIN_MESSAGES,
+    DRAFT_STEPS, DRAFT_STEP_ROUTES, DRAFT_MESSAGES, USER_MESSAGES, S3_FILE_TYPE, KYC_DOC_TYPES, KYC_REQUIRED_DOCS, KYC_COMPANY_NUMBER_FIELD, KYC_DOC_SPECS, KYC_DOC_LABEL_OVERRIDES, KYC_MESSAGES, GST_MESSAGES, CIN_MESSAGES, BUSINESS_CHECK_MESSAGES,
     ENCRYPT_DECRYPT_MESSAGES, DEFAULT_KYC_VERIFICATION_APPROVAL_TIME,
     KYC_STATUS, CHANNEL_TYPE, LOGIN_MESSAGES, REDIRECT_ROUTES, ADMIN_MESSAGES,
     ROLES, MATCHING_MESSAGES, TOKEN_TYPES, CONNECTION_STATUS, CONNECTION_MESSAGES,

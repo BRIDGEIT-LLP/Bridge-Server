@@ -7,26 +7,26 @@ const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const CIN_PATTERN = /^[A-Z]{1}[0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
 
 const companyRegistrationSchema = Joi.object({
-    companyName: Joi.string().min(3).max(100).required().messages({
-        'string.min': 'companyName must be at least 3 characters long',
-        'string.max': 'companyName must not exceed 100 characters',
-        'any.required': 'companyName is required'
+    company_name: Joi.string().min(3).max(100).required().messages({
+        'string.min': 'company_name must be at least 3 characters long',
+        'string.max': 'company_name must not exceed 100 characters',
+        'any.required': 'company_name is required'
     }),
-    email: Joi.string().email({ tlds: { allow: false } }).required().messages({
-        'string.email': 'email must be a valid email address',
-        'any.required': 'email is required'
+    company_email: Joi.string().email({ tlds: { allow: false } }).required().messages({
+        'string.email': 'company_email must be a valid email address',
+        'any.required': 'company_email is required'
     }),
-    countryCode: Joi.string().pattern(DIAL_CODE_PATTERN).required().messages({
-        'string.pattern.base': 'countryCode must be a dial code like +91 or +1',
-        'any.required': 'countryCode is required'
+    country_code: Joi.string().pattern(DIAL_CODE_PATTERN).required().messages({
+        'string.pattern.base': 'country_code must be a dial code like +91 or +1',
+        'any.required': 'country_code is required'
     }),
-    phoneNumber: Joi.string().pattern(NATIONAL_NUMBER_PATTERN).required().messages({
-        'string.pattern.base': 'phoneNumber must be a valid national number for the selected country',
-        'any.required': 'phoneNumber is required'
+    mobile_number: Joi.string().pattern(NATIONAL_NUMBER_PATTERN).required().messages({
+        'string.pattern.base': 'mobile_number must be a valid national number for the selected country',
+        'any.required': 'mobile_number is required'
     }),
-    password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required().messages({
+    password: Joi.string().min(8).pattern(/^(?=.*\d).{8,}$/).required().messages({
         'string.min': 'password must be at least 8 characters long',
-        'string.pattern.base': 'password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+        'string.pattern.base': 'password must contain at least one number',
         'any.required': 'password is required'
     }),
     role: Joi.string().valid('INVESTOR', 'B2B', 'STARTUP').required().messages({
@@ -36,26 +36,6 @@ const companyRegistrationSchema = Joi.object({
     termsAccepted: Joi.boolean().valid(true).required().messages({
         'any.only': 'termsAccepted must be true',
         'any.required': 'termsAccepted is required'
-    }),
-    gstNumber: Joi.string().pattern(GSTIN_PATTERN).when('role', {
-        is: 'B2B',
-        then: Joi.required().messages({
-            'any.required': 'gstNumber is required for B2B role',
-            'string.pattern.base': GST_MESSAGES.INVALID_FORMAT
-        }),
-        otherwise: Joi.optional().allow(null, '').messages({
-            'string.pattern.base': GST_MESSAGES.INVALID_FORMAT
-        })
-    }),
-    cinNumber: Joi.string().pattern(CIN_PATTERN).when('role', {
-        is: 'B2B',
-        then: Joi.required().messages({
-            'any.required': 'cinNumber is required for B2B role',
-            'string.pattern.base': CIN_MESSAGES.INVALID_FORMAT
-        }),
-        otherwise: Joi.optional().allow(null, '').messages({
-            'string.pattern.base': CIN_MESSAGES.INVALID_FORMAT
-        })
     })
 });
 
@@ -123,9 +103,9 @@ const loginSchema = Joi.object({
         'string.email': 'email must be a valid email address',
         'any.required': 'email is required'
     }),
-    password: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required().messages({
+    password: Joi.string().min(8).pattern(/^(?=.*\d).{8,}$/).required().messages({
         'string.min': 'password must be at least 8 characters long',
-        'string.pattern.base': 'password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+        'string.pattern.base': 'password must contain at least one number',
         'any.required': 'password is required'
     })
 });

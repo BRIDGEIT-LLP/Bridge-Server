@@ -151,7 +151,7 @@ describe('authController.login — blocked email', () => {
 
 describe('authController.companyRegistration — blocked email', () => {
     const body = {
-        companyName: 'Acme', email: 'founder@acme.io', countryCode: '+91', phoneNumber: '9876543210',
+        company_name: 'Acme', company_email: 'founder@acme.io', country_code: '+91', mobile_number: '9876543210',
         password: 'Passw0rd!', role: 'STARTUP', termsAccepted: true
     };
 

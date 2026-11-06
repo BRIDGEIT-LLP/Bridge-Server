@@ -6,7 +6,8 @@ const ServiceResponse = require('../utils/ServiceResponse');
 const { ROLE_FIELD_METADATA_MESSAGES, USER_MESSAGES } = require('../utils/constant');
 
 
-const validateUserPayload = async (role, payload) => {
+// draft: a saved draft may be incomplete, so required fields are not enforced; filled fields are still checked.
+const validateUserPayload = async (role, payload, { draft = false } = {}) => {
     try {
         const roleObj = await CompanyRoleMaster.findOne({
             where: { role_code: role.toUpperCase(), is_deleted: false }
@@ -35,7 +36,7 @@ const validateUserPayload = async (role, payload) => {
             const isEmpty = value === undefined || value === null || value === ''
                 || (Array.isArray(value) && value.length === 0);
 
-            if (is_required && isEmpty) {
+            if (is_required && isEmpty && !draft) {
                 errors.push({ field: lookup, message: `${display_name} is required` });
                 continue;
             }
