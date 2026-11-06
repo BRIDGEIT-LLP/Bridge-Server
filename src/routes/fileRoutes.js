@@ -16,6 +16,8 @@ router.get('/video-url', authMiddleware, authorize(PERMISSIONS.FILE.VIDEO_URL), 
 router.post('/save-kyc-info', authMiddleware, authorize(PERMISSIONS.FILE.SAVE_KYC_INFO), fileController.saveKycInfo);
 // file preview
 router.get('/file-preview', authMiddleware, authorize(PERMISSIONS.FILE.PREVIEW), fileController.filePreview);
+// documents + numbers the Documents step needs for the user's role, with anything already uploaded
+router.get('/kyc-requirements', authMiddleware, authorize(PERMISSIONS.FILE.SAVE_KYC_INFO), fileController.getKycRequirements);
 router.get('/get-kyc-docs', authMiddleware, authorize(PERMISSIONS.FILE.GET_KYC_DOCS), fileController.getKycDocs);
 
 module.exports = router

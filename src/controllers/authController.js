@@ -8,7 +8,7 @@ const emailBlockService = require('../services/emailBlockService');
 const gstVerificationService = require('../services/gstVerificationService');
 const cinVerificationService = require('../services/cinVerificationService');
 const userRepository = require('../repositories/userRepository');
-const { OTP_MESSAGES, OTP_PURPOSE, AUTH_MESSAGES, CHANNEL_TYPE, REGISTRATION_MESSAGES, USER_MESSAGES, LOGIN_MESSAGES, REDIRECT_ROUTES, TOKEN_TYPES, USER_TYPES, KYC_STATUS, ROLE_SWITCH_MESSAGES, GST_MESSAGES, CIN_MESSAGES, EMAIL_BLOCK_MESSAGES, BLOCK_REASONS } = require('../utils/constant');
+const { OTP_MESSAGES, OTP_PURPOSE, AUTH_MESSAGES, CHANNEL_TYPE, REGISTRATION_MESSAGES, USER_MESSAGES, LOGIN_MESSAGES, REDIRECT_ROUTES, TOKEN_TYPES, USER_TYPES, KYC_STATUS, ROLE_SWITCH_MESSAGES, GST_MESSAGES, CIN_MESSAGES, EMAIL_BLOCK_MESSAGES, BLOCK_REASONS, DRAFT_STEP_ROUTES } = require('../utils/constant');
 const HttpResponse = require('../utils/HttpResponse');
 const { maskPhone, maskEmail } = require('../utils/Helper');
 const { COOKIE_NAMES, cookieOptions, clearCookieOptions } = require('../utils/token');
@@ -75,7 +75,7 @@ function setAuthCookies(res, accessToken, refreshToken) {
 //  POST /api/v1/auth/company-registration
 const companyRegistration = async (req, res, next) => {
     try {
-        const { companyName, email, countryCode, phoneNumber, password, role, termsAccepted, gstNumber, cinNumber } = req.body;
+        const { company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted } = req.body;
 
         if (!termsAccepted) {
             return HttpResponse.error(res, {
@@ -112,31 +112,6 @@ const companyRegistration = async (req, res, next) => {
             return HttpResponse.error(res, {message:USER_MESSAGES.EMAIL_ALREADY_EXISTS, statusCode:400});
         }
 
-        // GSTIN/CIN are only collected for B2B — re-run the same verification the
-        // frontend already called on field-blur here, server-side, so registration
-        // can't complete with an unverified/invalid number even if that call was skipped.
-        let isGstVerified = false;
-        let isCinVerified = false;
-        if (role === 'B2B') {
-            const gstVerifyRes = await gstVerificationService.verifyGst(gstNumber);
-            if (!gstVerifyRes.success) {
-                return HttpResponse.error(res, {
-                    message: gstVerifyRes.message || GST_MESSAGES.NOT_VERIFIED_FOR_REGISTRATION,
-                    statusCode: gstVerifyRes.statusCode || 400
-                });
-            }
-            isGstVerified = true;
-
-            const cinVerifyRes = await cinVerificationService.verifyCin(cinNumber);
-            if (!cinVerifyRes.success) {
-                return HttpResponse.error(res, {
-                    message: cinVerifyRes.message || CIN_MESSAGES.NOT_VERIFIED_FOR_REGISTRATION,
-                    statusCode: cinVerifyRes.statusCode || 400
-                });
-            }
-            isCinVerified = true;
-        }
-
         // TODO: handle service response
         const emailOtpRes = await otpService.sendOTP(CHANNEL_TYPE.EMAIL, email, OTP_PURPOSE.REGISTRATION);
         if (!emailOtpRes.success) {
@@ -154,14 +129,14 @@ const companyRegistration = async (req, res, next) => {
         }
         
         // remove termsAccepted from payload before saving in db
-        const createCompanyRes = await authService.createCompany({ companyName, email, countryCode, phoneNumber, password, role, termsAccepted, gstNumber, cinNumber, isGstVerified, isCinVerified });
+        const createCompanyRes = await authService.createCompany({ company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted });
         if (!createCompanyRes.success) {
             return HttpResponse.error(res, { message: createCompanyRes.message, statusCode: createCompanyRes.statusCode });
         }
         
-        const companyObj = createCompanyRes.data.company
-        const roleObj = createCompanyRes.data.role
-        const userObj = createCompanyRes.data.user
+        const companyObj = createCompanyRes.data.company;
+        const roleObj = createCompanyRes.data.role;
+        const userObj = createCompanyRes.data.user;
 
         const userType = USER_TYPES[roleObj.role_code];
         const mfaTokenRes = await tokenService.generateMfaAccessToken(companyObj, roleObj, userObj, userType);
@@ -601,10 +576,14 @@ const verifyMfaOtp = async (req, res, next) => {
 
         const companyUserRoleRes = await authService.getUserCompanyRoleByCode(req.userId, req.companyId, req.role);
         const isProfileCompleted = !!companyUserRoleRes.data?.is_profile_completed;
+        const draftRoute = DRAFT_STEP_ROUTES[companyUserRoleRes.data?.draft_step];
 
         let redirectRoute = REDIRECT_ROUTES.DASHBOARD.DASHBOARD;
         if (!company.is_email_verified || !company.is_mobile_number_verified) {
             redirectRoute = REDIRECT_ROUTES.REGISTRATION.VERIFY_COMPANY_ACCOUNT;
+        } else if (draftRoute && !company.is_kyc_uploaded) {
+            // a saved draft: pick up at the step it was saved from
+            redirectRoute = draftRoute;
         } else if (!isProfileCompleted) {
             redirectRoute = REDIRECT_ROUTES.REGISTRATION.BUILD_USER_PROFILE;
         } else if (!company.is_kyc_uploaded) {

@@ -2,12 +2,16 @@
 const { errorLogger } = require('../configs/logger');
 const fieldMetadataService = require('../services/fieldMetadataService');
 const userService = require('../services/userService');
-const { USER_MESSAGES } = require('../utils/constant');
+const { USER_MESSAGES, DRAFT_STEPS, DRAFT_MESSAGES } = require('../utils/constant');
+const userRepository = require('../repositories/userRepository');
 const { encrypt } = require('../utils/encryption');
 const { isValidUUID } = require('../utils/Helper');
 const HttpResponse = require('../utils/HttpResponse');
 
 
+
+const isEmptyValue = (v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+const withoutEmpty = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => !isEmptyValue(v)));
 
 const createUserProfile = async (req, res, next) => {
     try {
@@ -15,7 +19,21 @@ const createUserProfile = async (req, res, next) => {
         const userId = req.userId;
         const roleId = req.roleId;
         const requestPayload = req.body;
-        const validationResult = await fieldMetadataService.validateUserPayload(role, requestPayload);
+        // ?draft=true&step=profile|intent keeps what is filled in and does not complete the profile.
+        const draft = req.query.draft === 'true';
+        const step = req.query.step;
+        if (draft && !DRAFT_STEPS.includes(step)) {
+            return HttpResponse.error(res, { message: DRAFT_MESSAGES.INVALID_STEP, statusCode: 400 });
+        }
+        // Completing the profile checks the payload together with what an earlier draft already saved, so the
+        // user does not have to send every field again (a draft keeps its fields in the database).
+        let payloadToValidate = requestPayload;
+        if (!draft) {
+            const existing = await userRepository.getUserById(userId);
+            const saved = existing ? existing.get({ plain: true }) : {};
+            payloadToValidate = { ...withoutEmpty(saved), ...withoutEmpty(requestPayload) };
+        }
+        const validationResult = await fieldMetadataService.validateUserPayload(role, payloadToValidate, { draft });
         if (!validationResult.success) {
             return HttpResponse.error(res, {
                 message: validationResult.message,
@@ -25,7 +43,7 @@ const createUserProfile = async (req, res, next) => {
         }
         const userData = { ...requestPayload };
 
-        const userProfileResponse = await userService.createUserProfile({ userData, companyId, userId, roleId });
+        const userProfileResponse = await userService.createUserProfile({ userData, companyId, userId, roleId, draft, step });
         if (!userProfileResponse.success) {
             return HttpResponse.error(res, {
                 message: userProfileResponse.message,

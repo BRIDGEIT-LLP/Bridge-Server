@@ -25,7 +25,7 @@ FROM (
         ('INVESTOR', 'user', 'address', 'Registered Office / Residential Address', true, true, 'string', true, false),
 
         -- ── B2B ──
-        ('B2B', 'user', 'business_type', 'Business Type', true, true, 'string', true, false),
+        ('B2B', 'user', 'business_type', 'Business Type', true, false, 'string', true, false),
         ('B2B', 'user', 'b2b_geography_country', 'Geographies (Countries)', true, true, 'array', true, false),
         ('B2B', 'user', 'b2b_geography_continent', 'Geographies (Continents)', true, false, 'array', true, false),
         ('B2B', 'user', 'address', 'Registered Office / Residential Address', true, true, 'string', true, false)

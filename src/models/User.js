@@ -52,6 +52,22 @@ module.exports = (sequelize) => {
             allowNull: true
         },
 
+        state: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
+        city: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
+        // Optional free text next to the intent ("Anything specific?"), max 300 characters.
+        intent_note: {
+            type: DataTypes.STRING(300),
+            allowNull: true
+        },
+
         primary_sector: {
             type: DataTypes.ARRAY(DataTypes.STRING),
             allowNull: true
