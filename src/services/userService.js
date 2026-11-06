@@ -7,9 +7,10 @@ const { errorLogger } = require('../configs/logger');
 const ServiceResponse = require('../utils/ServiceResponse');
 const gstVerificationService = require('./gstVerificationService');
 const cinVerificationService = require('./cinVerificationService');
-const { USER_MESSAGES, KYC_MESSAGES, GST_MESSAGES, CIN_MESSAGES } = require('../utils/constant');
+const { USER_MESSAGES, KYC_MESSAGES, GST_MESSAGES, CIN_MESSAGES, DRAFT_MESSAGES } = require('../utils/constant');
 const { decrypt } = require('../utils/encryption');
 const { getConnectableRoles } = require('../matching/eligibilityService');
+const emailBlockService = require('./emailBlockService');
 
 const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const CIN_PATTERN = /^[A-Z]{1}[0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
@@ -76,19 +77,31 @@ const prepareCompanyIdentifierPatch = async (userData, companyId) => {
     return ServiceResponse.success({ data: patch });
 };
 
-const createUserProfile = async ({ userData, companyId, userId, roleId }) => {
+/**
+ * Saves the profile. With draft=true only the filled-in fields are written (an empty draft field must not blank a
+ * saved value), the profile is not marked completed, and the step the draft was saved at is recorded instead.
+ */
+const createUserProfile = async ({ userData, companyId, userId, roleId, draft = false, step = null }) => {
     const transaction = await sequelize.transaction();
     try {
+        const data = draft
+            ? Object.fromEntries(Object.entries(userData || {}).filter(([, v]) => !(v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))))
+            : userData;
 
-        const user = await userRepository.updateUser(userData, userId, { transaction });
-        await companyRepository.updateCompanyContact(companyId, userData, { transaction });
-        await companyRepository.markProfileCompleted(userId, companyId, roleId, { transaction });
+        const user = await userRepository.updateUser(data, userId, { transaction });
+        await companyRepository.updateCompanyContact(companyId, data, { transaction });
+        if (draft) {
+            await companyRepository.setDraftStep(userId, companyId, roleId, step, { transaction });
+        } else {
+            // also clears draft_step
+            await companyRepository.markProfileCompleted(userId, companyId, roleId, { transaction });
+        }
 
         await transaction.commit();
         return ServiceResponse.success({
-            message: USER_MESSAGES.CREATE_SUCCESS,
+            message: draft ? DRAFT_MESSAGES.SAVED : USER_MESSAGES.CREATE_SUCCESS,
             data: { id: user.id },
-            statusCode: 201
+            statusCode: draft ? 200 : 201
         });
     } catch (error) {
         await transaction.rollback();
@@ -130,6 +143,9 @@ const searchUsers = async (searchQuery, roleCode, excludeUserId, viewerRoleId) =
 const getUserKycDocs = async () => {
     try {
         const rows = await userRepository.getUserKycDocs();
+        // Same for every row; lets the admin review UI warn before a rejection that
+        // would reach the limit and block the email.
+        const kycMaxRejections = await emailBlockService.getRejectionLimit();
 
         const userMap = new Map();
 
@@ -150,6 +166,9 @@ const getUserKycDocs = async () => {
                     kyc_status: row.kyc_status,
                     is_kyc_verified: row.is_kyc_verified,
                     kyc_rejection_reason: row.kyc_rejection_reason,
+                    kyc_rejection_count: row.kyc_rejection_count ?? 0,
+                    kyc_max_rejections: kycMaxRejections,
+                    is_email_blocked: Boolean(row.is_email_blocked),
                     kyc_documents: []
                 });
             }

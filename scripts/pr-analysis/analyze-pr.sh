@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Review an open PR with Claude and post the report as a PR comment.
+# Review an open PR with Claude and save the report locally — does NOT post
+# to GitHub.
 #
 # Runs entirely on local logins — the `claude` CLI login for the review and
-# the `gh` CLI login for GitHub access. No API key or token is stored
-# anywhere. Usable standalone for on-demand reviews, and invoked by
-# scripts/pr-analysis/watch-prs.sh for automatic reviews of PRs raised
-# against develop.
+# the `gh` CLI login for GitHub access (used only to fetch the diff/metadata,
+# never to post). No API key or token is stored anywhere.
 #
 # Usage: bash scripts/pr-analysis/analyze-pr.sh <PR number|URL|branch>
 set -euo pipefail
@@ -15,7 +14,7 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 # shellcheck source=../lib/claude-pr-analysis.sh
 source "$REPO_ROOT/scripts/lib/claude-pr-analysis.sh"
 
-REPORT_DIR="$REPO_ROOT/.claude-reports"
+REPORT_DIR="$REPO_ROOT/claude_pr_reports"
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <PR number|URL|branch>" >&2
@@ -106,6 +105,3 @@ disclaimer="> 🤖 **AI-generated code review** — produced by Claude. Treat it
 
 printf '%s\n%s\n\n%s\n' "$marker" "$disclaimer" "$output" > "$report_file"
 echo "Report saved to $report_file"
-
-gh pr comment "$pr_number" --body-file "$report_file"
-echo "Posted to PR #$pr_number"

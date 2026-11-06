@@ -58,6 +58,13 @@ module.exports = (sequelize) => {
             defaultValue: false
         },
 
+        // NULL = the registration is not a draft. Otherwise the registration step the user last saved as a draft
+        // (see DRAFT_STEPS); a normal Continue clears it.
+        draft_step: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
         rejection_reason: {
             type: DataTypes.STRING,
             allowNull: true

@@ -9,7 +9,7 @@ jest.mock('../../models', () => ({
 const { sequelize } = require('../../models');
 const { QueryTypes } = require('sequelize');
 const userRepository = require('../../repositories/userRepository');
-const { CONNECTION_BLOCKING_STATUSES, KYC_STATUS, KYC_DOC_TYPES } = require('../../utils/constant');
+const { CONNECTION_BLOCKING_STATUSES, KYC_STATUS, KYC_DOC_TYPES, KYC_REQUIRED_DOCS } = require('../../utils/constant');
 
 describe('userRepository.searchUsers', () => {
     beforeEach(() => {
@@ -37,7 +37,9 @@ describe('userRepository.searchUsers', () => {
                 searchableRoles: ['STARTUP'],
                 approvedStatus: KYC_STATUS.APPROVED,
                 kycDocTypes: KYC_DOC_TYPES,
-                kycDocTypeCount: KYC_DOC_TYPES.length
+                b2bDocCount: KYC_REQUIRED_DOCS.B2B.length,
+                startupDocCount: KYC_REQUIRED_DOCS.STARTUP.length,
+                investorDocCount: KYC_REQUIRED_DOCS.INVESTOR.length
             })
         }));
     });
@@ -63,7 +65,9 @@ describe('userRepository.searchUsers', () => {
         expect(options.replacements).toEqual(expect.objectContaining({
             approvedStatus: KYC_STATUS.APPROVED,
             kycDocTypes: KYC_DOC_TYPES,
-            kycDocTypeCount: KYC_DOC_TYPES.length
+            b2bDocCount: KYC_REQUIRED_DOCS.B2B.length,
+                startupDocCount: KYC_REQUIRED_DOCS.STARTUP.length,
+                investorDocCount: KYC_REQUIRED_DOCS.INVESTOR.length
         }));
     });
 });

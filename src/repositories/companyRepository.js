@@ -90,10 +90,22 @@ const markKycUploaded = async (companyId, { transaction } = {}) => {
     return updatedCompany;
 };
 
-const getCompanyById = async (companyId) => {
+// `lock` takes a row lock (SELECT ... FOR UPDATE) — only meaningful with a transaction.
+const getCompanyById = async (companyId, { transaction, lock } = {}) => {
     return await Company.findOne({
-        where: { id: companyId, is_deleted: false }
+        where: { id: companyId, is_deleted: false },
+        transaction,
+        lock: lock && transaction ? transaction.LOCK.UPDATE : undefined
     });
+};
+
+// Atomic so concurrent rejections cannot lose an increment.
+const incrementKycRejectionCount = async (companyId, { transaction } = {}) => {
+    const [, [updatedCompany]] = await Company.update(
+        { kyc_rejection_count: sequelize.literal('kyc_rejection_count + 1') },
+        { where: { id: companyId }, transaction, returning: true }
+    );
+    return updatedCompany;
 };
 
 const getDefaultCompanyIdByUserId = async (userId) => {
@@ -156,7 +168,7 @@ const updateCompanyUserRoleStatus = async (id, data, { transaction } = {}) => {
 
 const markProfileCompleted = async (userId, companyId, roleId, { transaction } = {}) => {
     const [, [updatedRole]] = await CompanyUserRole.update(
-        { is_profile_completed: true, updated_at: new Date() },
+        { is_profile_completed: true, draft_step: null, updated_at: new Date() },
         {
             where: { user_id: userId, company_id: companyId, role_id: roleId, is_deleted: false },
             returning: true,
@@ -164,6 +176,17 @@ const markProfileCompleted = async (userId, companyId, roleId, { transaction } =
         }
     );
     return updatedRole;
+};
+
+/**
+ * Records where the user last saved a draft (one of DRAFT_STEPS), or clears the draft marker with null once a
+ * step is saved for real.
+ */
+const setDraftStep = async (userId, companyId, roleId, step, { transaction } = {}) => {
+    await CompanyUserRole.update(
+        { draft_step: step ?? null, updated_at: new Date() },
+        { where: { user_id: userId, company_id: companyId, role_id: roleId, is_deleted: false }, transaction }
+    );
 };
 
 const markDefaultProfileCompleted = async (userId, companyId, { transaction } = {}) => {
@@ -224,6 +247,7 @@ const updateCompanyIdentifiers = async (companyId, data, { transaction } = {}) =
 };
 
 module.exports = {
+    setDraftStep,
     findByEmail,
     findCompanyWithRoleByEmail,
     findRoleMasterByCode,
@@ -241,6 +265,7 @@ module.exports = {
     markProfileCompleted,
     markDefaultProfileCompleted,
     markKycUploaded,
+    incrementKycRejectionCount,
     updateCompanyContact,
     updateCompanyIdentifiers,
     incrementFailedLoginAttempts,

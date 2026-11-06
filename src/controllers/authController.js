@@ -4,10 +4,11 @@ const authService = require('../services/authService');
 const userService = require('../services/userService');
 const otpService = require('../services/otp.service');
 const tokenService = require('../services/tokenService');
+const emailBlockService = require('../services/emailBlockService');
 const gstVerificationService = require('../services/gstVerificationService');
 const cinVerificationService = require('../services/cinVerificationService');
 const userRepository = require('../repositories/userRepository');
-const { OTP_MESSAGES, OTP_PURPOSE, AUTH_MESSAGES, CHANNEL_TYPE, REGISTRATION_MESSAGES, USER_MESSAGES, LOGIN_MESSAGES, REDIRECT_ROUTES, TOKEN_TYPES, USER_TYPES, KYC_STATUS, ROLE_SWITCH_MESSAGES, GST_MESSAGES, CIN_MESSAGES } = require('../utils/constant');
+const { OTP_MESSAGES, OTP_PURPOSE, AUTH_MESSAGES, CHANNEL_TYPE, REGISTRATION_MESSAGES, USER_MESSAGES, LOGIN_MESSAGES, REDIRECT_ROUTES, TOKEN_TYPES, USER_TYPES, KYC_STATUS, ROLE_SWITCH_MESSAGES, GST_MESSAGES, CIN_MESSAGES, EMAIL_BLOCK_MESSAGES, BLOCK_REASONS, DRAFT_STEP_ROUTES } = require('../utils/constant');
 const HttpResponse = require('../utils/HttpResponse');
 const { maskPhone, maskEmail } = require('../utils/Helper');
 const { COOKIE_NAMES, cookieOptions, clearCookieOptions } = require('../utils/token');
@@ -27,6 +28,45 @@ const REFRESH_COOKIE_OPTS = {
     maxAge: 7 * 24 * 60 * 60 * 1000,   // 7 days
 };
 
+/**
+ * Blocked-email gate for the pre-authentication endpoints. Sends the response and
+ * returns true when the request must stop: the email is blocked, or the lookup
+ * failed (fails CLOSED — a blocked user is never let through on an error).
+ *
+ * `detailed` is only used at login, after the password has been verified: the
+ * caller has proven they own the account, so the full blocking state (reason,
+ * count, limit) can be returned without telling a stranger that an email is
+ * registered-and-blocked. Registration and password reset use the generic message.
+ */
+const respondIfEmailBlocked = async (res, email, { detailed = false } = {}) => {
+    const blockRes = await emailBlockService.checkEmail(email);
+    if (!blockRes.success) {
+        HttpResponse.error(res, { message: blockRes.message, statusCode: blockRes.statusCode });
+        return true;
+    }
+    if (!blockRes.data.blocked) {
+        return false;
+    }
+
+    const block = blockRes.data.block;
+    if (!detailed) {
+        HttpResponse.error(res, { message: EMAIL_BLOCK_MESSAGES.BLOCKED, statusCode: 403 });
+        return true;
+    }
+
+    HttpResponse.error(res, {
+        message: EMAIL_BLOCK_MESSAGES.BLOCKED_AFTER_REJECTION(block.rejection_limit),
+        statusCode: 403,
+        data: {
+            isEmailBlocked: true,
+            reason: block.reason ?? BLOCK_REASONS.KYC_REJECTED_MAX,
+            kycRejectionCount: block.rejection_count,
+            maxRejections: block.rejection_limit
+        }
+    });
+    return true;
+};
+
 function setAuthCookies(res, accessToken, refreshToken) {
     res.cookie('access_token', accessToken, ACCESS_COOKIE_OPTS);
     res.cookie('refresh_token', refreshToken, REFRESH_COOKIE_OPTS);
@@ -35,13 +75,19 @@ function setAuthCookies(res, accessToken, refreshToken) {
 //  POST /api/v1/auth/company-registration
 const companyRegistration = async (req, res, next) => {
     try {
-        const { companyName, email, countryCode, phoneNumber, password, role, termsAccepted, gstNumber, cinNumber } = req.body;
+        const { company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted } = req.body;
 
         if (!termsAccepted) {
             return HttpResponse.error(res, {
                 message: 'You must accept the terms and conditions to register.',
                 statusCode: 400
             });
+        }
+
+        // Before the existing-email check and before any OTP is sent, so a blocked
+        // address never receives an SMS/email.
+        if (await respondIfEmailBlocked(res, email)) {
+            return;
         }
 
         const existingCompanyRes = await authService.getCompanyByEmail(email);
@@ -66,31 +112,6 @@ const companyRegistration = async (req, res, next) => {
             return HttpResponse.error(res, {message:USER_MESSAGES.EMAIL_ALREADY_EXISTS, statusCode:400});
         }
 
-        // GSTIN/CIN are only collected for B2B — re-run the same verification the
-        // frontend already called on field-blur here, server-side, so registration
-        // can't complete with an unverified/invalid number even if that call was skipped.
-        let isGstVerified = false;
-        let isCinVerified = false;
-        if (role === 'B2B') {
-            const gstVerifyRes = await gstVerificationService.verifyGst(gstNumber);
-            if (!gstVerifyRes.success) {
-                return HttpResponse.error(res, {
-                    message: gstVerifyRes.message || GST_MESSAGES.NOT_VERIFIED_FOR_REGISTRATION,
-                    statusCode: gstVerifyRes.statusCode || 400
-                });
-            }
-            isGstVerified = true;
-
-            const cinVerifyRes = await cinVerificationService.verifyCin(cinNumber);
-            if (!cinVerifyRes.success) {
-                return HttpResponse.error(res, {
-                    message: cinVerifyRes.message || CIN_MESSAGES.NOT_VERIFIED_FOR_REGISTRATION,
-                    statusCode: cinVerifyRes.statusCode || 400
-                });
-            }
-            isCinVerified = true;
-        }
-
         // TODO: handle service response
         const emailOtpRes = await otpService.sendOTP(CHANNEL_TYPE.EMAIL, email, OTP_PURPOSE.REGISTRATION);
         if (!emailOtpRes.success) {
@@ -108,14 +129,14 @@ const companyRegistration = async (req, res, next) => {
         }
         
         // remove termsAccepted from payload before saving in db
-        const createCompanyRes = await authService.createCompany({ companyName, email, countryCode, phoneNumber, password, role, termsAccepted, gstNumber, cinNumber, isGstVerified, isCinVerified });
+        const createCompanyRes = await authService.createCompany({ company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted });
         if (!createCompanyRes.success) {
             return HttpResponse.error(res, { message: createCompanyRes.message, statusCode: createCompanyRes.statusCode });
         }
         
-        const companyObj = createCompanyRes.data.company
-        const roleObj = createCompanyRes.data.role
-        const userObj = createCompanyRes.data.user
+        const companyObj = createCompanyRes.data.company;
+        const roleObj = createCompanyRes.data.role;
+        const userObj = createCompanyRes.data.user;
 
         const userType = USER_TYPES[roleObj.role_code];
         const mfaTokenRes = await tokenService.generateMfaAccessToken(companyObj, roleObj, userObj, userType);
@@ -397,6 +418,12 @@ const login = async (req, res, next) => {
             await authService.resetLoginAttempts(existingCompany.id);
         }
 
+        // After the password check on purpose (see respondIfEmailBlocked), and before
+        // any MFA token is issued so a blocked user is not pushed into the OTP step.
+        if (await respondIfEmailBlocked(res, email, { detailed: true })) {
+            return;
+        }
+
         const existingUserRes = await authService.getUserByEmail(email);
 
         if (!existingUserRes.success) {
@@ -431,8 +458,12 @@ const login = async (req, res, next) => {
         const tokens = await tokenService.generateMfaAccessToken(existingCompany, role, existingUser, userType);
         const { accessToken } = tokens.data;
 
+        // Reminder on every sign-in from the first KYC rejection until approval.
+        // Built before any cookie is set; it never throws (returns null on error).
+        const kycRejection = await emailBlockService.buildKycRejectionWarning(existingCompany);
+
         res.cookie(COOKIE_NAMES.MFA_TOKEN, accessToken, cookieOptions(env.JWT.MFA_EXPIRY));
-        return HttpResponse.success( res, {data: { role: role.role_code, maskedMobile, maskedEmail }, message: LOGIN_MESSAGES.VALID_CREDENTIALS })
+        return HttpResponse.success( res, {data: { role: role.role_code, maskedMobile, maskedEmail, ...(kycRejection && { kycRejection }) }, message: LOGIN_MESSAGES.VALID_CREDENTIALS })
     } catch (error) {
         console.error(error)
         errorLogger.error(error);
@@ -545,10 +576,14 @@ const verifyMfaOtp = async (req, res, next) => {
 
         const companyUserRoleRes = await authService.getUserCompanyRoleByCode(req.userId, req.companyId, req.role);
         const isProfileCompleted = !!companyUserRoleRes.data?.is_profile_completed;
+        const draftRoute = DRAFT_STEP_ROUTES[companyUserRoleRes.data?.draft_step];
 
         let redirectRoute = REDIRECT_ROUTES.DASHBOARD.DASHBOARD;
         if (!company.is_email_verified || !company.is_mobile_number_verified) {
             redirectRoute = REDIRECT_ROUTES.REGISTRATION.VERIFY_COMPANY_ACCOUNT;
+        } else if (draftRoute && !company.is_kyc_uploaded) {
+            // a saved draft: pick up at the step it was saved from
+            redirectRoute = draftRoute;
         } else if (!isProfileCompleted) {
             redirectRoute = REDIRECT_ROUTES.REGISTRATION.BUILD_USER_PROFILE;
         } else if (!company.is_kyc_uploaded) {
@@ -585,10 +620,12 @@ const verifyMfaOtp = async (req, res, next) => {
         });
         const { accessToken, refreshToken } = tokens.data;
 
+        const kycRejection = await emailBlockService.buildKycRejectionWarning(company);
+
         res.clearCookie(COOKIE_NAMES.MFA_TOKEN, clearCookieOptions());
         res.cookie(COOKIE_NAMES.ACCESS_TOKEN, accessToken, cookieOptions(env.JWT.ACCESS_EXPIRY));
         res.cookie(COOKIE_NAMES.REFRESH_TOKEN, refreshToken, cookieOptions(env.JWT.REFRESH_EXPIRY));
-        return HttpResponse.success(res, { message: OTP_MESSAGES.OTP_VERIFY_SUCCESS, data: { userId: user.id, tokenType: TOKEN_TYPES.AUTH_ACCESS_TOKEN, redirectRoute: redirectRoute, isEmailVerified, isPhoneVerified, isKycVerified: company.is_kyc_verified, first_name: user.first_name, last_name: user.last_name, role: role.role_code, companyName: company.company_name }, statusCode: 200 });
+        return HttpResponse.success(res, { message: OTP_MESSAGES.OTP_VERIFY_SUCCESS, data: { userId: user.id, tokenType: TOKEN_TYPES.AUTH_ACCESS_TOKEN, redirectRoute: redirectRoute, isEmailVerified, isPhoneVerified, isKycVerified: company.is_kyc_verified, first_name: user.first_name, last_name: user.last_name, role: role.role_code, companyName: company.company_name, ...(kycRejection && { kycRejection }) }, statusCode: 200 });
     } catch (error) {
         errorLogger.error(error);
         return HttpResponse.error(res, { message: OTP_MESSAGES.OTP_VERIFICATION_FAILED, statusCode: 500 });
@@ -649,6 +686,10 @@ const resetPasswordTriggerOtp = async (req, res, next) => {
             });
         }
 
+        if (await respondIfEmailBlocked(res, email)) {
+            return;
+        }
+
         const result = await otpService.sendOTP(CHANNEL_TYPE.EMAIL, email, OTP_PURPOSE.RESET_PASSWORD);
         if (!result.success) {
             return HttpResponse.error(res, {
@@ -693,6 +734,10 @@ const resetPasswordVerifyOtp = async (req, res, next) => {
             });
         }
 
+        if (await respondIfEmailBlocked(res, email)) {
+            return;
+        }
+
         const tokenRes = await tokenService.generateResetPasswordAcessToken(email);
         if (!tokenRes.success) {
             return HttpResponse.error(res, { message: tokenRes.message, statusCode: tokenRes.statusCode });
@@ -734,6 +779,10 @@ const resetPassword = async (req, res, next) => {
                 message: USER_MESSAGES.USER_NOT_FOUND,
                 statusCode: 400
             });
+        }
+
+        if (await respondIfEmailBlocked(res, email)) {
+            return;
         }
 
         const result = await authService.resetPassword(email, newPassword);

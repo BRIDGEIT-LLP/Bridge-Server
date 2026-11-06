@@ -51,15 +51,11 @@ const createCompany = async (data) => {
         // TODO:- encyption add
         // TODO:- need to remove termsAccepted
         const companyData = {
-            company_name: data.companyName,
-            company_email: data.email, 
-            country_code: data.countryCode,
-            mobile_number: data.phoneNumber,
+            company_name: data.company_name,
+            company_email: data.company_email,
+            country_code: data.country_code,
+            mobile_number: data.mobile_number,
             password: await hashPassword(data.password),
-            gst_number: data?.gstNumber,
-            cin_number: data?.cinNumber,
-            is_gst_verified: data?.isGstVerified === true,
-            is_cin_verified: data?.isCinVerified === true,
             terms_accepted: data.termsAccepted,
             is_email_verified: false,
             is_mobile_number_verified: false,
@@ -70,10 +66,10 @@ const createCompany = async (data) => {
         const role = await companyRepository.findRoleMasterByCode(data.role);
 
         const userData = {
-            company_email: data.email,
+            company_email: data.company_email,
             password: await hashPassword(data.password),
-            mobile_number: data.phoneNumber,
-            country_code: data.countryCode,
+            mobile_number: data.mobile_number,
+            country_code: data.country_code,
             created_at: new Date()
         };
         const user = await userRepository.createUser(userData, { transaction });

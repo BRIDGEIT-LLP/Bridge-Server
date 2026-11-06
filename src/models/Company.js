@@ -125,6 +125,15 @@ module.exports = (sequelize) => {
             allowNull: true
         },
 
+        // Lifetime count of final admin KYC rejections. Deliberately separate from
+        // kyc_status: a resubmission resets kyc_status to Pending, but the count
+        // must survive so the email can be blocked after the configured limit.
+        kyc_rejection_count: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0
+        },
+
         failed_login_attempts: {
             type: DataTypes.INTEGER,
             allowNull: false,
