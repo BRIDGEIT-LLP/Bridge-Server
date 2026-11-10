@@ -8,6 +8,7 @@ const emailBlockService = require('../services/emailBlockService');
 const gstVerificationService = require('../services/gstVerificationService');
 const cinVerificationService = require('../services/cinVerificationService');
 const userRepository = require('../repositories/userRepository');
+const companyRepository = require('../repositories/companyRepository');
 const { OTP_MESSAGES, OTP_PURPOSE, AUTH_MESSAGES, CHANNEL_TYPE, REGISTRATION_MESSAGES, USER_MESSAGES, LOGIN_MESSAGES, REDIRECT_ROUTES, TOKEN_TYPES, USER_TYPES, KYC_STATUS, ROLE_SWITCH_MESSAGES, GST_MESSAGES, CIN_MESSAGES, EMAIL_BLOCK_MESSAGES, BLOCK_REASONS, DRAFT_STEP_ROUTES } = require('../utils/constant');
 const HttpResponse = require('../utils/HttpResponse');
 const { maskPhone, maskEmail } = require('../utils/Helper');
@@ -110,6 +111,15 @@ const companyRegistration = async (req, res, next) => {
         const existingCompany = existingCompanyRes.data;
         if (existingCompany || existingUserRes.data) {
             return HttpResponse.error(res, {message:USER_MESSAGES.EMAIL_ALREADY_EXISTS, statusCode:400});
+        }
+
+        // mobile_number is unique on both company and user; check before sending OTPs.
+        const [mobileCompany, mobileUser] = await Promise.all([
+            companyRepository.findByMobile(phoneNumber),
+            userRepository.findByMobile(phoneNumber)
+        ]);
+        if (mobileCompany || mobileUser) {
+            return HttpResponse.error(res, {message:USER_MESSAGES.MOBILE_ALREADY_EXISTS, statusCode:400});
         }
 
         // TODO: handle service response
@@ -471,8 +481,107 @@ const login = async (req, res, next) => {
     }
 };
 
+//  POST /api/v1/auth/login/otp
+// One-time-code sign-in: no password. Looks the account up by email or mobile number,
+// issues the same pre-MFA cookie as /login and sends the OTP to the channel the user
+// typed. The code is then checked by the existing /mfa/verify-otp, which also decides
+// the redirect route from the user's registration progress.
+const loginWithOtp = async (req, res, next) => {
+    try {
+        const identifier = req.body.identifier.trim();
+        const isEmail = identifier.includes('@');
+        const channel = isEmail ? CHANNEL_TYPE.EMAIL : CHANNEL_TYPE.PHONE;
+        const maskedDestination = isEmail ? maskEmail(identifier) : maskPhone(identifier);
+
+        // Identical response for "no such account" and "code sent" (no cookie, no OTP
+        // in the first case) so the endpoint can't be used to probe registered accounts.
+        const genericResponse = () => HttpResponse.success(res, {
+            data: { channel, maskedDestination },
+            message: LOGIN_MESSAGES.OTP_LOGIN_SENT,
+            statusCode: 200
+        });
+
+        const companyRes = isEmail
+            ? await authService.getCompanyByEmail(identifier)
+            : await authService.getCompanyByMobile(identifier);
+        if (!companyRes.success) {
+            return HttpResponse.error(res, { message: companyRes.message, statusCode: companyRes.statusCode });
+        }
+
+        const company = companyRes.data;
+        if (!company) {
+            return genericResponse();
+        }
+
+        // Same password-attempt lockout /login enforces; an OTP login must not bypass it.
+        const lockStatus = await authService.checkLoginLockStatus(company);
+        if (lockStatus.locked) {
+            return HttpResponse.error(res, { message: lockStatus.message, statusCode: 403 });
+        }
+
+        // Before any token or OTP is issued, so a blocked user is not pushed into the OTP step.
+        if (await respondIfEmailBlocked(res, company.company_email)) {
+            return;
+        }
+
+        const userRes = await authService.getUserByEmail(company.company_email);
+        if (!userRes.success) {
+            return HttpResponse.error(res, { message: userRes.message, statusCode: userRes.statusCode });
+        }
+        const user = userRes.data;
+        if (!user) {
+            return genericResponse();
+        }
+
+        const companyUserRoleRes = await authService.getCompanyUser_role(company.id, user.id);
+        const role = companyUserRoleRes && companyUserRoleRes.data;
+        if (!role) {
+            return genericResponse();
+        }
+
+        const userType = USER_TYPES[role.role_code];
+        const tokens = await tokenService.generateMfaAccessToken(company, role, user, userType);
+        if (!tokens.success) {
+            return HttpResponse.error(res, { message: tokens.message, statusCode: 500 });
+        }
+
+        // Cookie first, so /mfa/resend-otp keeps working if this send is rate-limited.
+        res.cookie(COOKIE_NAMES.MFA_TOKEN, tokens.data.accessToken, cookieOptions(env.JWT.MFA_EXPIRY));
+
+        const otpRes = await otpService.sendOTP(
+            channel,
+            isEmail ? company.company_email : company.mobile_number,
+            OTP_PURPOSE.LOGIN_MFA
+        );
+        if (!otpRes.success) {
+            return HttpResponse.error(res, { message: otpRes.message, statusCode: otpRes.statusCode || 400 });
+        }
+
+        const kycRejection = await emailBlockService.buildKycRejectionWarning(company);
+
+        return HttpResponse.success(res, {
+            data: {
+                channel,
+                maskedDestination,
+                role: role.role_code,
+                maskedMobile: maskPhone(company.country_code + company.mobile_number),
+                maskedEmail: maskEmail(company.company_email),
+                ...(kycRejection && { kycRejection })
+            },
+            // TODO:- Remove OTP from Response (same dev-only behaviour as /mfa/trigger-otp):
+            // otpService's message carries the code so the UI can toast it. Switch back to
+            // LOGIN_MESSAGES.OTP_LOGIN_SENT before production.
+            message: otpRes.message,
+            statusCode: 200
+        });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, { message: AUTH_MESSAGES.LOGIN_FAILED, statusCode: 500 });
+    }
+};
+
 //  POST /api/v1/auth/trigger-otp
-const triggerOtp = async (req, res, next) => {
+const triggerOtp =async (req, res, next) => {
     try {
         const email = req.email;
         const mobileNumber = req.mobileNumber;
@@ -964,6 +1073,7 @@ module.exports = {
     resendOtp,
     updateAccessToken,
     login,
+    loginWithOtp,
     triggerOtp,
     verifyMfaOtp,
     resendMfaOtp,

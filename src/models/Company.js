@@ -32,7 +32,8 @@ module.exports = (sequelize) => {
 
         mobile_number: {
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: false,
+            unique: true
         },
 
         password: {
