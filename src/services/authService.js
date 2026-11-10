@@ -27,6 +27,21 @@ const getCompanyByEmail = async (email) => {
 }
 }
 
+const getCompanyByMobile = async (mobileNumber) => {
+    try {
+        const company = await companyRepository.findByMobile(mobileNumber);
+        return ServiceResponse.success({ data: company });
+    }
+    catch (error) {
+        errorLogger.error(error);
+        return ServiceResponse.error({
+            message: 'Error occured while checking company mobile number.',
+            data: [error.message],
+            statusCode: 500
+        });
+    }
+};
+
 const getUserByEmail = async (email) => {
     try {
         const existingEmailUser = await userRepository.findByEmail(email);
@@ -516,6 +531,7 @@ module.exports = {
     createCompany,
     updateChannelVerifiedStatus,
     getCompanyByEmail,
+    getCompanyByMobile,
     getUserByEmail,
     getCompanyUser_role,
     getUserCompanyRoleByCode,

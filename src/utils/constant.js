@@ -100,6 +100,7 @@ const USER_MESSAGES = {
     UPDATE_SUCCESS: 'User profile updated successfully',
     UPDATE_FAILED: 'Error encountered while updating user profile',
     EMAIL_ALREADY_EXISTS: 'A user with this email already exists',
+    MOBILE_ALREADY_EXISTS: 'A user with this mobile number already exists',
     ROLE_NOT_FOUND: 'Company role not found for this account',
     PROFILE_NOT_COMPLETED: 'Profile for the switching role is not completed.',
     PROFILE_PENDING_APPROVAL: 'Profile for the switching role is still pending approval.',
@@ -123,7 +124,10 @@ const USER_MESSAGES = {
 const LOGIN_MESSAGES = {
     INVALID_CREDENTIALS: 'Invalid Credentials',
     VALID_CREDENTIALS: 'Logged in successfully',
-    USER_NOT_FOUND: 'User not found'
+    USER_NOT_FOUND: 'User not found',
+    // Same text whether or not the account exists, so the endpoint can't be used to
+    // discover which emails / mobile numbers are registered.
+    OTP_LOGIN_SENT: 'If an account exists for this email or mobile number, a verification code has been sent.'
 };
 
 const KYC_MESSAGES = {

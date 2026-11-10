@@ -4,6 +4,12 @@ const { sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
 const { KYC_STATUS } = require('../utils/constant');
 
+const findByMobile = async (mobileNumber) => {
+    return await Company.findOne({
+        where: { mobile_number: mobileNumber }
+    });
+};
+
 const findByEmail = async (email) => {
     return await Company.findOne({
         where: { company_email: email }
@@ -247,6 +253,7 @@ const updateCompanyIdentifiers = async (companyId, data, { transaction } = {}) =
 };
 
 module.exports = {
+    findByMobile,
     setDraftStep,
     findByEmail,
     findCompanyWithRoleByEmail,

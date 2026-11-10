@@ -106,6 +106,12 @@ const findByEmail = async (email) => {
 } 
 
 
+const findByMobile = async (mobileNumber) => {
+    return await User.findOne({
+        where: { mobile_number: mobileNumber }
+    });
+};
+
 const getCompanyUser_role = async (companyId, userId) => {
     return await sequelize.query(
         `select crm.id, crm.role_name, crm.role_code, crm.role_description
@@ -460,6 +466,7 @@ module.exports = {
     createUser,
     updateUser,
     findByEmail,
+    findByMobile,
     getCompanyUser_role,
     getUserList,
     getUsersWithSwitchedRoles,
