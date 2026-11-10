@@ -41,6 +41,42 @@ const getUserDashboard = async (req, res) => {
 };
 
 /**
+ * GET /api/v1/users/dashboard/home
+ *
+ * Guarded by authMiddleware → authorize(PERMISSIONS.USER.VIEW_DASHBOARD).
+ * req.userId / req.roleId / req.role are extracted from the JWT payload.
+ *
+ * Returns the S10 Home screen widget set: top introductions, requests for
+ * you, active deal rooms, the monthly connection-request counter, and a
+ * dummy Vouch payload.
+ */
+const getUserDashboardHome = async (req, res) => {
+    try {
+        const { userId, roleId, role } = req;
+
+        const result = await dashboardService.getUserDashboardHome({ userId, roleId, role });
+        if (!result.success) {
+            return HttpResponse.error(res, {
+                message: result.message,
+                statusCode: result.statusCode,
+            });
+        }
+
+        return HttpResponse.success(res, {
+            message: result.message,
+            data: result.data,
+            statusCode: result.statusCode,
+        });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, {
+            message: DASHBOARD_MESSAGES.FETCH_FAILED,
+            statusCode: 500,
+        });
+    }
+};
+
+/**
  * GET /api/v1/admin/dashboard
  *
  * Guarded by adminMiddleware → authorize(PERMISSIONS.ADMIN_DASHBOARD.VIEW).
@@ -109,4 +145,4 @@ const getSuperAdminDashboard = async (req, res) => {
     }
 };
 
-module.exports = { getUserDashboard, getAdminDashboard, getSuperAdminDashboard };
+module.exports = { getUserDashboard, getUserDashboardHome, getAdminDashboard, getSuperAdminDashboard };

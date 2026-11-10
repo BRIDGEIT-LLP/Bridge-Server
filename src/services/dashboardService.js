@@ -1,9 +1,49 @@
 'use strict';
 
 const dashboardRepository = require('../repositories/dashboardRepository');
+const matchingService = require('../matching/matchingService');
+const connectionService = require('./connectionService');
+const dealRoomService = require('./dealRoomService');
+const adminConfigService = require('./adminConfigService');
+const userRepository = require('../repositories/userRepository');
 const { errorLogger } = require('../configs/logger');
 const ServiceResponse = require('../utils/ServiceResponse');
-const { DASHBOARD_MESSAGES } = require('../utils/constant');
+const { DASHBOARD_MESSAGES, CONNECTION_STATUS, TRIAL_CONFIG_LOOKUP_KEYS, TRIAL_DAYS_LIMITS } = require('../utils/constant');
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Days left in the free Discovery trial, counted from signup (user.created_at).
+// Only meaningful for non-subscribers — callers should skip this for members.
+const getTrialDaysRemaining = async (userId) => {
+    const [user, trialDayLimit] = await Promise.all([
+        userRepository.getUserById(userId),
+        adminConfigService.getTrialConfigValue(TRIAL_CONFIG_LOOKUP_KEYS.FREE_TRIAL_DAY, TRIAL_DAYS_LIMITS.FREE),
+    ]);
+    const signupAt = user?.created_at ? new Date(user.created_at) : null;
+    if (!signupAt || Number.isNaN(signupAt.getTime())) {
+        return Number(trialDayLimit) || 0;
+    }
+    const daysElapsed = Math.floor((Date.now() - signupAt.getTime()) / MS_PER_DAY);
+    return Math.max((Number(trialDayLimit) || 0) - daysElapsed, 0);
+};
+
+const TOP_INTRODUCTIONS_LIMIT = 3;
+const REQUESTS_FOR_YOU_LIMIT = 5;
+const DEAL_ROOMS_PANEL_LIMIT = 5;
+
+// Vouch/Referral has no backing model yet (per product decision) — this returns
+// static placeholder data so the Home widget has something to render until the
+// real referral feature (FRD §3.7) is built.
+const getDummyVouchData = () => ({
+    vouchCode: 'BRIDGE-VOUCH-DEMO',
+    totalVouched: 4,
+    pendingInvites: 2,
+    freeMonthsEarned: 1,
+    recentVouches: [
+        { name: 'Aditi Rao', organizationName: 'Northwind Foods', status: 'Joined' },
+        { name: 'Rahul Mehta', organizationName: 'Orbit Logistics', status: 'Invited' },
+    ],
+});
 
 // ─── User Dashboard ───────────────────────────────────────────────────────────
 
@@ -57,6 +97,72 @@ const getUserDashboard = async ({ userId }) => {
                     profileViews:   0,
                     watchlistCount: 0,
                 },
+            },
+            statusCode: 200,
+        });
+    } catch (error) {
+        errorLogger.error(error);
+        return ServiceResponse.error({ message: DASHBOARD_MESSAGES.FETCH_FAILED, statusCode: 500 });
+    }
+};
+
+// ─── User Dashboard — Home screen (S10) ──────────────────────────────────────
+//
+// Aggregates data already computed by the matching/connection/deal-room
+// services into one response for the Home screen, instead of the frontend
+// firing three+ parallel requests and re-deriving business rules (billing
+// window, request caps) itself.
+
+const getUserDashboardHome = async ({ userId, roleId, role }) => {
+    try {
+        const [matchesResult, receivedResult, dealRoomsResult] = await Promise.all([
+            matchingService.getMatches(userId, role)
+                .catch((err) => { errorLogger.error(err); return null; }),
+            connectionService.getReceivedConnections(userId, roleId)
+                .catch((err) => { errorLogger.error(err); return null; }),
+            dealRoomService.getDealRooms(userId, roleId, { archived: false })
+                .catch((err) => { errorLogger.error(err); return null; }),
+        ]);
+
+        const matches = matchesResult?.success ? matchesResult.data : null;
+        const receivedConnections = receivedResult?.success ? receivedResult.data : [];
+        const dealRooms = dealRoomsResult?.success ? dealRoomsResult.data : [];
+
+        // "Waiting" = every candidate the matching engine currently returns for this
+        // profile (already excludes anyone already connected/requested) — capped at
+        // the engine's own MATCHES_LIMIT (10), so this is "up to 10", not a true total.
+        const introductionsWaitingCount = (matches?.matches || []).length;
+        const topIntroductions = (matches?.matches || []).slice(0, TOP_INTRODUCTIONS_LIMIT);
+        const requestsForYou = (receivedConnections || [])
+            .filter((connection) => connection.status === CONNECTION_STATUS.PENDING)
+            .slice(0, REQUESTS_FOR_YOU_LIMIT);
+
+        // `null` here means "unknown" (the matching call failed), distinct from a
+        // confirmed `false` — a failed lookup must never be reported as "not
+        // subscribed", or a paying member would be shown the trial upsell.
+        const hasActiveSubscription = matches ? matches.hasActiveSubscription : null;
+        const trialDaysRemaining = hasActiveSubscription === false
+            ? await getTrialDaysRemaining(userId).catch((err) => { errorLogger.error(err); return null; })
+            : null;
+
+        return ServiceResponse.success({
+            message: DASHBOARD_MESSAGES.FETCH_SUCCESS,
+            data: {
+                introductionsWaitingCount,
+                topIntroductions,
+                requestsForYou,
+                dealRooms: (dealRooms || []).slice(0, DEAL_ROOMS_PANEL_LIMIT),
+                monthlyRequests: {
+                    sent: matches?.requestsSentInWindow ?? 0,
+                    limit: matches?.requestLimit ?? 0,
+                    remaining: matches?.requestsRemaining ?? 0,
+                },
+                membership: {
+                    hasActiveSubscription,
+                    trialDaysRemaining,
+                },
+                // Dummy data — no Vouch/Referral model exists yet.
+                vouch: getDummyVouchData(),
             },
             statusCode: 200,
         });
@@ -163,4 +269,4 @@ const getSuperAdminDashboard = async ({ adminId }) => {
     }
 };
 
-module.exports = { getUserDashboard, getAdminDashboard, getSuperAdminDashboard };
+module.exports = { getUserDashboard, getUserDashboardHome, getAdminDashboard, getSuperAdminDashboard };

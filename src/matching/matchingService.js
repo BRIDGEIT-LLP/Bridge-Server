@@ -78,7 +78,7 @@ const getMatches = async (profileId, userRole) => {
         if (eligibleCandidates.length === 0) {
             return ServiceResponse.success({
                 message: MATCHING_MESSAGES.NO_MATCHES_FOUND,
-                data: { profileId: userId, matches: [], requestsSentInWindow, requestLimit, requestsRemaining },
+                data: { profileId: userId, matches: [], requestsSentInWindow, requestLimit, requestsRemaining, hasActiveSubscription },
                 statusCode: 200
             });
         }
@@ -180,7 +180,7 @@ const getMatches = async (profileId, userRole) => {
 
         return ServiceResponse.success({
             message: MATCHING_MESSAGES.MATCH_SUCCESS,
-            data: { profileId: userId, matches: limitedMatches, requestsSentInWindow, requestLimit, requestsRemaining },
+            data: { profileId: userId, matches: limitedMatches, requestsSentInWindow, requestLimit, requestsRemaining, hasActiveSubscription },
             statusCode: 200
         });
 
