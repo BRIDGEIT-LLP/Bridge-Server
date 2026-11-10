@@ -137,10 +137,13 @@ const getUserDashboardHome = async ({ userId, roleId, role }) => {
             .filter((connection) => connection.status === CONNECTION_STATUS.PENDING)
             .slice(0, REQUESTS_FOR_YOU_LIMIT);
 
-        const hasActiveSubscription = matches?.hasActiveSubscription ?? false;
-        const trialDaysRemaining = hasActiveSubscription
-            ? null
-            : await getTrialDaysRemaining(userId).catch((err) => { errorLogger.error(err); return null; });
+        // `null` here means "unknown" (the matching call failed), distinct from a
+        // confirmed `false` — a failed lookup must never be reported as "not
+        // subscribed", or a paying member would be shown the trial upsell.
+        const hasActiveSubscription = matches ? matches.hasActiveSubscription : null;
+        const trialDaysRemaining = hasActiveSubscription === false
+            ? await getTrialDaysRemaining(userId).catch((err) => { errorLogger.error(err); return null; })
+            : null;
 
         return ServiceResponse.success({
             message: DASHBOARD_MESSAGES.FETCH_SUCCESS,
