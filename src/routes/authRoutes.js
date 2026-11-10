@@ -11,6 +11,7 @@ const {
     resendOtpSchema,
     refreshTokenSchema,
     loginSchema,
+    loginOtpSchema,
     resetPasswordSchema,
     switchRoleSchema,
     requestRoleSwitchSchema
@@ -46,6 +47,10 @@ router.post('/refresh', validate(refreshTokenSchema), authController.updateAcces
 
 // Route for company login
 router.post('/login', validate(loginSchema), authController.login);
+
+// Route for one-time-code login (email or mobile number, no password). Issues the
+// same pre-MFA token as /login and sends the OTP; /mfa/verify-otp completes sign-in.
+router.post('/login/otp', validate(loginOtpSchema), authController.loginWithOtp);
 
 // Route for triggering OTP (MFA) — guarded by the pre-MFA token, not the app token
 router.post('/mfa/trigger-otp', mfaMiddleware, authorize(PERMISSIONS.AUTH.MFA_TRIGGER_OTP), authController.triggerOtp);

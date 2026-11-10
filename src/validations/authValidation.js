@@ -111,7 +111,7 @@ const loginSchema = Joi.object({
 });
 
 /**
- * Higher-order middleware to run Joi validation against `req.body` (default)
+ *Higher-order middleware to run Joi validation against `req.body` (default)
  * or another request property such as `query`.
  */
 const validate = (schema, source = 'body') => {
@@ -144,6 +144,22 @@ const switchRoleSchema = Joi.object({
 // role's profile fields (user/company columns) collected on the switch form.
 const requestRoleSwitchSchema = switchRoleSchema.unknown(true);
 
+// One-time-code login: `identifier` is either an email or a national mobile number
+// (digits only, no country code — mobile_number is unique across companies).
+const loginOtpSchema = Joi.object({
+    identifier: Joi.string().trim().required().custom((value, helpers) => {
+        const isEmail = !Joi.string().email({ tlds: { allow: false } }).validate(value).error;
+        if (isEmail || NATIONAL_NUMBER_PATTERN.test(value)) {
+            return value;
+        }
+        return helpers.error('string.identifier');
+    }).messages({
+        'string.identifier': 'identifier must be a valid email address or mobile number',
+        'string.empty': 'identifier is required',
+        'any.required': 'identifier is required'
+    })
+});
+
 const resetPasswordSchema = Joi.object({
     newPassword: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required().messages({
         'string.min': 'newPassword must be at least 8 characters long',
@@ -161,6 +177,7 @@ module.exports = {
     resendOtpSchema,
     refreshTokenSchema,
     loginSchema,
+    loginOtpSchema,
     resetPasswordSchema,
     switchRoleSchema,
     requestRoleSwitchSchema
