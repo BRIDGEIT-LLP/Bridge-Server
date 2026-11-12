@@ -6,7 +6,27 @@ const { DIAL_CODE_PATTERN, NATIONAL_NUMBER_PATTERN } = require('../utils/phoneVa
 const GSTIN_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const CIN_PATTERN = /^[A-Z]{1}[0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
 
+/**
+ * Member password rule (registration and password reset): at least 8 characters with at least one uppercase
+ * letter, one number and one special character (any character that is not a letter, digit or space).
+ * Keep in step with MEMBER_PASSWORD_REGEX in the web app's lib/validation.ts. Login deliberately does not use
+ * this: existing accounts keep signing in with the password they already have.
+ */
+const memberPassword = (label) => Joi.string().required().custom((value, helpers) => {
+    if (value.length < 8) return helpers.message(`${label} must be at least 8 characters long`);
+    if (!/[A-Z]/.test(value)) return helpers.message(`${label} must contain at least one uppercase letter`);
+    if (!/\d/.test(value)) return helpers.message(`${label} must contain at least one number`);
+    if (!/[^A-Za-z0-9\s]/.test(value)) return helpers.message(`${label} must contain at least one special character`);
+    return value;
+}).messages({
+    'any.required': `${label} is required`,
+    'string.empty': `${label} is required`,
+    'string.base': `${label} must be text`
+});
+
 const companyRegistrationSchema = Joi.object({
+    first_name: Joi.string().trim().max(50).allow('', null).optional(),
+    last_name: Joi.string().trim().max(50).allow('', null).optional(),
     company_name: Joi.string().min(3).max(100).required().messages({
         'string.min': 'company_name must be at least 3 characters long',
         'string.max': 'company_name must not exceed 100 characters',
@@ -24,11 +44,7 @@ const companyRegistrationSchema = Joi.object({
         'string.pattern.base': 'mobile_number must be a valid national number for the selected country',
         'any.required': 'mobile_number is required'
     }),
-    password: Joi.string().min(8).pattern(/^(?=.*\d).{8,}$/).required().messages({
-        'string.min': 'password must be at least 8 characters long',
-        'string.pattern.base': 'password must contain at least one number',
-        'any.required': 'password is required'
-    }),
+    password: memberPassword('password'),
     role: Joi.string().valid('INVESTOR', 'B2B', 'STARTUP').required().messages({
         'any.only': 'role must be one of: INVESTOR, B2B, STARTUP',
         'any.required': 'role is required'
@@ -85,6 +101,24 @@ const resendOtpSchema = Joi.object({
         then: Joi.required().messages({ 'any.required': 'email is required when channel is EMAIL' }),
         otherwise: Joi.optional().allow(null, '')
     }),
+    phoneNumber: Joi.string().pattern(NATIONAL_NUMBER_PATTERN).when('channel', {
+        is: 'PHONE',
+        then: Joi.required().messages({ 'any.required': 'phoneNumber is required when channel is PHONE' }),
+        otherwise: Joi.optional().allow(null, '')
+    })
+});
+
+const updateContactSchema = Joi.object({
+    channel: Joi.string().valid('EMAIL', 'PHONE').required().messages({
+        'any.only': 'channel must be EMAIL or PHONE',
+        'any.required': 'channel is required'
+    }),
+    email: Joi.string().email({ tlds: { allow: false } }).when('channel', {
+        is: 'EMAIL',
+        then: Joi.required().messages({ 'any.required': 'email is required when channel is EMAIL' }),
+        otherwise: Joi.optional().allow(null, '')
+    }),
+    countryCode: Joi.string().pattern(DIAL_CODE_PATTERN).optional().allow(null, ''),
     phoneNumber: Joi.string().pattern(NATIONAL_NUMBER_PATTERN).when('channel', {
         is: 'PHONE',
         then: Joi.required().messages({ 'any.required': 'phoneNumber is required when channel is PHONE' }),
@@ -161,11 +195,7 @@ const loginOtpSchema = Joi.object({
 });
 
 const resetPasswordSchema = Joi.object({
-    newPassword: Joi.string().min(8).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/).required().messages({
-        'string.min': 'newPassword must be at least 8 characters long',
-        'string.pattern.base': 'newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
-        'any.required': 'newPassword is required'
-    })
+    newPassword: memberPassword('newPassword')
 });
 
 module.exports = {
@@ -175,6 +205,7 @@ module.exports = {
     verifyCinSchema,
     verifyOtpSchema,
     resendOtpSchema,
+    updateContactSchema,
     refreshTokenSchema,
     loginSchema,
     loginOtpSchema,

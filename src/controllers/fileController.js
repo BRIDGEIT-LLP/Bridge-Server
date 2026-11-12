@@ -274,7 +274,14 @@ const saveKycInfo = async (req, res) => {
         const userId = req.userId;
         const companyId = req.companyId;
         const roleId = req.roleId;
-        const payload = req.body;
+        // The registered address and the consent tick travel with the documents but are not documents themselves.
+        const { registered_address, kyc_consent, ...payload } = req.body || {};
+        if (registered_address !== undefined && (typeof registered_address !== 'string' || registered_address.length > 500)) {
+            return HttpResponse.error(res, { message: 'registered_address must be text of at most 500 characters', statusCode: 400 });
+        }
+        if (kyc_consent !== undefined && typeof kyc_consent !== 'boolean') {
+            return HttpResponse.error(res, { message: 'kyc_consent must be true or false', statusCode: 400 });
+        }
 
         // ?draft=true&step=documents stores whatever is there without submitting the documents for review.
         const draft = req.query.draft === 'true';
@@ -296,6 +303,7 @@ const saveKycInfo = async (req, res) => {
                 return HttpResponse.error(res, { message: result.message, statusCode: result.statusCode });
             }
         }
+        await companyRepository.updateKycDraftFields(companyId, { kyc_address: registered_address, kyc_consent });
         // a draft remembers the step; a real submission clears the draft marker
         await companyRepository.setDraftStep(userId, companyId, roleId, draft ? step : null);
 

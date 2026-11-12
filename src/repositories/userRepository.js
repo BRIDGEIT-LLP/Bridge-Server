@@ -462,9 +462,27 @@ const getUserProfileFieldsConfig = async (roleId) => {
     });
 };
 
+/**
+ * Registration-only: rewrite the contact details of a user whose email/mobile is not verified yet (the
+ * "wrong number / wrong email" correction on the verify step). Never used for a verified identity.
+ */
+const updateUnverifiedContact = async (userId, patch, { transaction } = {}) => {
+    const data = {};
+    for (const col of ['company_email', 'country_code', 'mobile_number']) {
+        if (patch?.[col] !== undefined) data[col] = patch[col];
+    }
+    if (Object.keys(data).length === 0) return null;
+    const [, rows] = await User.update(
+        { ...data, updated_at: new Date() },
+        { where: { id: userId, is_deleted: false }, returning: true, transaction }
+    );
+    return rows?.[0] ?? null;
+};
+
 module.exports = {
     createUser,
     updateUser,
+    updateUnverifiedContact,
     findByEmail,
     findByMobile,
     getCompanyUser_role,

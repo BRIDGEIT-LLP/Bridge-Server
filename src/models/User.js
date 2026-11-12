@@ -62,6 +62,11 @@ module.exports = (sequelize) => {
             allowNull: true
         },
 
+        // Founder "Your raise" details (new registration UI). All optional.
+        year_of_incorporation: { type: DataTypes.INTEGER, allowNull: true },
+        funds_raised: { type: DataTypes.STRING(200), allowNull: true },
+        co_founders: { type: DataTypes.STRING(300), allowNull: true },
+
         // Optional free text next to the intent ("Anything specific?"), max 300 characters.
         intent_note: {
             type: DataTypes.STRING(300),

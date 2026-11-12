@@ -213,6 +213,34 @@ const markDefaultProfileCompleted = async (userId, companyId, { transaction } = 
  */
 const COMPANY_CONTACT_COLUMNS = ['mobile_number', 'country_code'];
 
+/** Documents step draft: the registered address and the consent tick. Only the fields that are sent are written. */
+const updateKycDraftFields = async (companyId, { kyc_address, kyc_consent }, { transaction } = {}) => {
+    const patch = {};
+    if (typeof kyc_address === 'string') patch.kyc_address = kyc_address.trim();
+    if (typeof kyc_consent === 'boolean') patch.kyc_consent = kyc_consent;
+    if (Object.keys(patch).length === 0) return null;
+    await Company.update({ ...patch, updated_at: new Date() }, { where: { id: companyId, is_deleted: false }, transaction });
+    return patch;
+};
+
+/**
+ * Registration-only: rewrite the company email / mobile of an account whose channel is not verified yet
+ * (the "wrong email / wrong number" correction on the verify step). Kept separate from
+ * updateCompanyContact so a profile payload can never change the account identity.
+ */
+const updateUnverifiedContact = async (companyId, patch, { transaction } = {}) => {
+    const data = {};
+    for (const col of ['company_email', 'country_code', 'mobile_number']) {
+        if (patch?.[col] !== undefined) data[col] = patch[col];
+    }
+    if (Object.keys(data).length === 0) return null;
+    const [, rows] = await Company.update(
+        { ...data, updated_at: new Date() },
+        { where: { id: companyId, is_deleted: false }, returning: true, transaction }
+    );
+    return rows?.[0] ?? null;
+};
+
 const updateCompanyContact = async (companyId, data, { transaction } = {}) => {
     if (!companyId) return null;
 
@@ -264,6 +292,8 @@ module.exports = {
     updatePhoneVerifiedStatus,
     updateKycStatus,
     getCompanyById,
+    updateKycDraftFields,
+    updateUnverifiedContact,
     updatePasswordByEmail,
     getCompanyUser,
     getDefaultCompanyIdByUserId,
