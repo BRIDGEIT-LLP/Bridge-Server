@@ -9,6 +9,7 @@ const {
     verifyCinSchema,
     verifyOtpSchema,
     resendOtpSchema,
+    updateContactSchema,
     refreshTokenSchema,
     loginSchema,
     loginOtpSchema,
@@ -41,6 +42,15 @@ router.post('/verify-otp', mfaMiddleware, authorize(PERMISSIONS.AUTH.VERIFY_OTP)
 
 // Route for resending an OTP for a channel
 router.post('/resend-otp', mfaMiddleware, authorize(PERMISSIONS.AUTH.RESEND_OTP), validate(resendOtpSchema), authController.resendOtp);
+
+// Route for reloading the saved application. Works with the full token (after both OTPs) and with the
+// pre-verification token (while still on the verify step), so a closed browser can resume at any step.
+router.get('/registration-state', (req, res, next) => {
+    return req.cookies?.access_token ? authMiddleware(req, res, next) : mfaMiddleware(req, res, next);
+}, authController.getRegistrationState);
+
+// Route for correcting an unverified email / mobile on the verify step; re-issues the pre-MFA token and sends a fresh OTP
+router.post('/update-contact', mfaMiddleware, authorize(PERMISSIONS.AUTH.RESEND_OTP), validate(updateContactSchema), authController.updateContact);
 
 // Route for updating access tokens via refresh tokens
 router.post('/refresh', validate(refreshTokenSchema), authController.updateAccessToken);

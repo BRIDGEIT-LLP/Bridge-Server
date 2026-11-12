@@ -113,3 +113,55 @@ VALUES
 ((select id from company_role_master where role_code = 'B2B'), 'user', 'products_ervice_Offered', 'Products/Service Offered', true, true, 'string', true, false, now()),
 ((select id from company_role_master where role_code = 'B2B'), 'user', 'business_requirements', 'Business Requirements', true, true, 'string', true, false, now()),
 ((select id from company_role_master where role_code = 'B2B'), 'user', 'b2b_intent', 'B2B Intent', true, true, 'string', true, false, now());
+
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Registration fields added with the new member-application UI. They are also available as incremental scripts
+-- (2026-11-06_add_state_city_fields.sql, 2026-11-06_add_intent_note_field.sql,
+-- 2026-11-12_add_startup_raise_details_fields.sql). Every insert is guarded by NOT EXISTS, so this whole file stays
+-- safe to re-run. user_profile_field_master is what lets build-profile write these `user` columns, so a field
+-- without a row here is silently dropped.
+-- ---------------------------------------------------------------------------------------------------------------
+
+-- State / city (optional, all roles)
+INSERT INTO public.user_profile_field_master
+    (role_id, source_table, field_name, display_name, is_editable, is_required, type,
+     is_registration_field, is_kyc_field, created_at)
+SELECT r.id, 'user', v.field_name, v.display_name, true, false, 'string', true, false, now()
+FROM public.company_role_master r
+CROSS JOIN (VALUES ('state', 'State'), ('city', 'City')) AS v(field_name, display_name)
+WHERE r.role_code IN ('STARTUP', 'INVESTOR', 'B2B')
+  AND NOT EXISTS (
+    SELECT 1 FROM public.user_profile_field_master m
+    WHERE m.role_id = r.id AND m.source_table = 'user' AND m.field_name = v.field_name
+);
+
+-- "Anything specific?" note next to the intent (optional, all roles, max 300 characters)
+INSERT INTO public.user_profile_field_master
+    (role_id, source_table, field_name, display_name, is_editable, is_required, type,
+     is_registration_field, is_kyc_field, max_length, created_at)
+SELECT r.id, 'user', 'intent_note', 'Intent details', true, false, 'string', true, false, 300, now()
+FROM public.company_role_master r
+WHERE r.role_code IN ('STARTUP', 'INVESTOR', 'B2B')
+  AND NOT EXISTS (
+    SELECT 1 FROM public.user_profile_field_master m
+    WHERE m.role_id = r.id AND m.source_table = 'user' AND m.field_name = 'intent_note'
+);
+
+-- Founder "Your raise" details (optional, STARTUP only)
+INSERT INTO public.user_profile_field_master
+    (role_id, source_table, field_name, display_name, is_editable, is_required, type,
+     is_registration_field, is_kyc_field, max_length, min_value, max_value, created_at)
+SELECT r.id, 'user', v.field_name, v.display_name, true, false, v.type,
+       true, false, v.max_length, v.min_value, v.max_value, now()
+FROM public.company_role_master r
+CROSS JOIN (VALUES
+    ('year_of_incorporation', 'Year of incorporation', 'integer', NULL::int, 1900, 2100),
+    ('funds_raised',          'Funding raised so far', 'string',  200,       NULL::int, NULL::int),
+    ('co_founders',           'Co-founders',           'string',  300,       NULL::int, NULL::int)
+) AS v(field_name, display_name, type, max_length, min_value, max_value)
+WHERE r.role_code = 'STARTUP'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.user_profile_field_master m
+    WHERE m.role_id = r.id AND m.source_table = 'user' AND m.field_name = v.field_name
+);

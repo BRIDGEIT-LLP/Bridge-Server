@@ -109,6 +109,17 @@ module.exports = (sequelize) => {
             defaultValue: false
         },
 
+        // Documents step (saved as a draft): registered address "as on your ID" and the consent tick.
+        kyc_address: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        kyc_consent: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
+
         is_kyc_verified: {
             type: DataTypes.BOOLEAN,
             allowNull: true,

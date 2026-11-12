@@ -76,7 +76,7 @@ function setAuthCookies(res, accessToken, refreshToken) {
 //  POST /api/v1/auth/company-registration
 const companyRegistration = async (req, res, next) => {
     try {
-        const { company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted } = req.body;
+        const { company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted, first_name, last_name } = req.body;
 
         if (!termsAccepted) {
             return HttpResponse.error(res, {
@@ -139,7 +139,7 @@ const companyRegistration = async (req, res, next) => {
         }
         
         // remove termsAccepted from payload before saving in db
-        const createCompanyRes = await authService.createCompany({ company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted });
+        const createCompanyRes = await authService.createCompany({ company_name, company_email: email, country_code, mobile_number: phoneNumber, password, role, termsAccepted, first_name, last_name });
         if (!createCompanyRes.success) {
             return HttpResponse.error(res, { message: createCompanyRes.message, statusCode: createCompanyRes.statusCode });
         }
@@ -344,6 +344,74 @@ const resendOtp = async (req, res, next) => {
             message: OTP_MESSAGES.OTP_GENERATION_FAILED,
             statusCode: 500
         });
+    }
+};
+
+//  GET /api/v1/auth/registration-state
+// Lets the registration screens reload the saved application (nothing is kept in the browser).
+const getRegistrationState = async (req, res) => {
+    try {
+        const result = await authService.getRegistrationState({
+            companyId: req.companyId,
+            userId: req.userId,
+            roleCode: req.role
+        });
+        if (!result.success) {
+            return HttpResponse.error(res, { message: result.message, statusCode: result.statusCode });
+        }
+        return HttpResponse.success(res, { data: result.data, message: 'Application loaded.', statusCode: 200 });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, { message: 'Could not load your application.', statusCode: 500 });
+    }
+};
+
+//  POST /api/v1/auth/update-contact
+// Wrong email / wrong number on the verify step: replace the unverified channel's value, re-issue the pre-MFA
+// token (it carries the email / mobile) and send a fresh registration OTP to the new value.
+const updateContact = async (req, res, next) => {
+    try {
+        const { channel, email, countryCode, phoneNumber } = req.body;
+
+        const updated = await authService.updateUnverifiedContact({
+            companyId: req.companyId,
+            userId: req.userId,
+            channel,
+            email,
+            countryCode,
+            phoneNumber
+        });
+        if (!updated.success) {
+            return HttpResponse.error(res, { message: updated.message, statusCode: updated.statusCode });
+        }
+
+        const { company, user } = updated.data;
+        const role = { role_code: req.role, id: req.roleId };
+        const mfaTokenRes = await tokenService.generateMfaAccessToken(company, role, user ?? { id: req.userId }, req.userType);
+        if (!mfaTokenRes.success) {
+            return HttpResponse.error(res, { message: mfaTokenRes.message, statusCode: 500 });
+        }
+        res.cookie(COOKIE_NAMES.MFA_TOKEN, mfaTokenRes.data.accessToken, cookieOptions(env.JWT.MFA_EXPIRY));
+
+        const otpRes = channel === CHANNEL_TYPE.EMAIL
+            ? await otpService.sendOTP(CHANNEL_TYPE.EMAIL, company.company_email, OTP_PURPOSE.REGISTRATION)
+            : await otpService.sendOTP(CHANNEL_TYPE.PHONE, company.mobile_number, OTP_PURPOSE.REGISTRATION);
+        if (!otpRes.success) {
+            return HttpResponse.error(res, { message: otpRes.message, statusCode: otpRes.statusCode || 400 });
+        }
+
+        return HttpResponse.success(res, {
+            data: {
+                email: company.company_email,
+                countryCode: company.country_code,
+                mobileNumber: company.mobile_number
+            },
+            message: otpRes.message,
+            statusCode: 200
+        });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, { message: OTP_MESSAGES.OTP_GENERATION_FAILED, statusCode: 500 });
     }
 };
 
@@ -1071,6 +1139,8 @@ module.exports = {
     verifyCin,
     verifyOtp,
     resendOtp,
+    updateContact,
+    getRegistrationState,
     updateAccessToken,
     login,
     loginWithOtp,
