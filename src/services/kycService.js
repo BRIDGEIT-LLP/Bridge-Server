@@ -344,7 +344,9 @@ const getKycRequirements = async ({ userId, companyId, roleId, roleCode }) => {
                 documents,
                 kyc_status: company?.kyc_status ?? null,
                 rejection_reason: company?.kyc_rejection_reason ?? null,
-                is_kyc_uploaded: !!company?.is_kyc_uploaded
+                is_kyc_uploaded: !!company?.is_kyc_uploaded,
+                registered_address: company?.kyc_address ?? '',
+                kyc_consent: !!company?.kyc_consent
             },
             statusCode: 200
         });

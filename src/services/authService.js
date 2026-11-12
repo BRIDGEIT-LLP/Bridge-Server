@@ -85,6 +85,9 @@ const createCompany = async (data) => {
             password: await hashPassword(data.password),
             mobile_number: data.mobile_number,
             country_code: data.country_code,
+            // Asked on the Apply step; kept so the name survives until the Profile step.
+            ...(data.first_name ? { first_name: data.first_name } : {}),
+            ...(data.last_name ? { last_name: data.last_name } : {}),
             created_at: new Date()
         };
         const user = await userRepository.createUser(userData, { transaction });
@@ -526,7 +529,114 @@ const resetPassword = async (email, newPassword) => {
     }
 };
 
+/**
+ * "Wrong email / wrong number" on the verify step: replace the email or mobile of a channel that is still
+ * unverified. Verified channels are the account identity and cannot be changed here. The new value must not
+ * belong to another account. Returns the refreshed company + user so the caller can re-issue the MFA token.
+ */
+const updateUnverifiedContact = async ({ companyId, userId, channel, email, countryCode, phoneNumber }) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const company = await companyRepository.getCompanyById(companyId, { transaction, lock: true });
+        if (!company) {
+            await transaction.rollback();
+            return ServiceResponse.error({ message: USER_MESSAGES.USER_NOT_FOUND, statusCode: 404 });
+        }
+
+        const isEmail = channel === 'EMAIL';
+        if (isEmail ? company.is_email_verified : company.is_mobile_number_verified) {
+            await transaction.rollback();
+            return ServiceResponse.error({
+                message: `Your ${isEmail ? 'email' : 'mobile number'} is already verified and cannot be changed.`,
+                statusCode: 400
+            });
+        }
+
+        if (isEmail) {
+            if (email !== company.company_email) {
+                const [companyHit, userHit] = await Promise.all([
+                    companyRepository.findByEmail(email),
+                    userRepository.findByEmail(email)
+                ]);
+                if (companyHit || userHit) {
+                    await transaction.rollback();
+                    return ServiceResponse.error({ message: USER_MESSAGES.EMAIL_ALREADY_EXISTS, statusCode: 400 });
+                }
+            }
+        } else if (phoneNumber !== company.mobile_number) {
+            const [companyHit, userHit] = await Promise.all([
+                companyRepository.findByMobile(phoneNumber),
+                userRepository.findByMobile(phoneNumber)
+            ]);
+            if (companyHit || userHit) {
+                await transaction.rollback();
+                return ServiceResponse.error({ message: USER_MESSAGES.MOBILE_ALREADY_EXISTS, statusCode: 400 });
+            }
+        }
+
+        const patch = isEmail
+            ? { company_email: email }
+            : { mobile_number: phoneNumber, ...(countryCode ? { country_code: countryCode } : {}) };
+
+        const updatedCompany = await companyRepository.updateUnverifiedContact(companyId, patch, { transaction });
+        const updatedUser = await userRepository.updateUnverifiedContact(userId, patch, { transaction });
+        await transaction.commit();
+        return ServiceResponse.success({ data: { company: updatedCompany ?? company, user: updatedUser }, statusCode: 200 });
+    } catch (error) {
+        await transaction.rollback();
+        errorLogger.error(error);
+        if (error instanceof UniqueConstraintError) {
+            return ServiceResponse.error({
+                message: channel === 'EMAIL' ? USER_MESSAGES.EMAIL_ALREADY_EXISTS : USER_MESSAGES.MOBILE_ALREADY_EXISTS,
+                statusCode: 400
+            });
+        }
+        return ServiceResponse.error({ message: 'Could not update your contact details. Please try again.', statusCode: 500 });
+    }
+};
+
+/**
+ * What the registration screens need to come back to after the browser was closed: the account details,
+ * what is verified, where the draft stopped, and the Documents-step address / consent. Everything else of the
+ * draft (profile, intent, business check, documents) is read from its own endpoint.
+ */
+const getRegistrationState = async ({ companyId, userId, roleCode }) => {
+    try {
+        const [company, user, roleInfo] = await Promise.all([
+            companyRepository.getCompanyById(companyId),
+            userRepository.getUserById(userId),
+            userRepository.getUserCompanyRoleByCode(userId, companyId, roleCode)
+        ]);
+        if (!company) {
+            return ServiceResponse.error({ message: USER_MESSAGES.USER_NOT_FOUND, statusCode: 404 });
+        }
+        return ServiceResponse.success({
+            data: {
+                companyName: company.company_name,
+                email: company.company_email,
+                countryCode: company.country_code,
+                mobileNumber: company.mobile_number,
+                role: roleCode,
+                firstName: user?.first_name ?? '',
+                lastName: user?.last_name ?? '',
+                isEmailVerified: !!company.is_email_verified,
+                isPhoneVerified: !!company.is_mobile_number_verified,
+                isProfileCompleted: !!roleInfo?.is_profile_completed,
+                draftStep: roleInfo?.draft_step ?? null,
+                kycAddress: company.kyc_address ?? '',
+                kycConsent: !!company.kyc_consent
+            },
+            statusCode: 200
+        });
+    } catch (error) {
+        errorLogger.error(error);
+        return ServiceResponse.error({ message: 'Could not load your application.', statusCode: 500 });
+    }
+};
+
 module.exports = {
+    getRegistrationState,
+    updateUnverifiedContact,
     checkPassword,
     createCompany,
     updateChannelVerifiedStatus,
