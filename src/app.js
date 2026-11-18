@@ -110,6 +110,7 @@ server.listen(SERVER_PORT, () => {
         })
         .catch(err => console.error('Unable to connect to the database:', err));
     console.info(`Server is running on port http://localhost:${SERVER_PORT}`);
+    console.info(`Database host: ${db.sequelize.config.host}, database name: ${db.sequelize.config.database}`);
 });
 
 module.exports = app;
