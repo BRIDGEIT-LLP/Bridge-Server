@@ -7,7 +7,7 @@ const gstVerificationService = require('./gstVerificationService');
 const ServiceResponse = require('../utils/ServiceResponse');
 const { errorLogger } = require('../configs/logger');
 const { encrypt, decrypt } = require('../utils/encryption');
-const { GST_MESSAGES, CIN_MESSAGES, KYC_STATUS, BUSINESS_CHECK_MESSAGES } = require('../utils/constant');
+const { GST_MESSAGES, CIN_MESSAGES, KYC_STATUS, BUSINESS_CHECK_MESSAGES, VERIFICATION_STATUS } = require('../utils/constant');
 
 const isFilled = (v) => typeof v === 'string' && v.trim() !== '';
 
@@ -56,7 +56,9 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
         });
     }
 
-    // GSTIN: only roles that ask for it; anyone else sending one is ignored.
+    // GSTIN: only roles that ask for it; anyone else sending one is ignored. Verification
+    // queue (FRD §12.5) columns are set from the same live sandbox.co.in response so the
+    // reviewer sees a real result instead of a placeholder.
     let gstPatch = null;
     if (gst && rules.gst !== 'none') {
         if (isFilled(company.gst_number)) {
@@ -71,8 +73,15 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: gstVerifyRes.statusCode || 400
                 });
             }
-            gstPatch = { gst_number: gst, is_gst_verified: true };
+            gstPatch = {
+                gst_number: gst,
+                is_gst_verified: true,
+                gst_verification_status: gstVerifyRes.data.verified ? VERIFICATION_STATUS.PASSED : VERIFICATION_STATUS.FAILED,
+                gst_registered_name: gstVerifyRes.data.legalName || gstVerifyRes.data.tradeName || null
+            };
         }
+    } else if (rules.gst === 'none') {
+        gstPatch = { gst_verification_status: VERIFICATION_STATUS.NOT_NEEDED };
     }
 
     let cinPatch = null;
@@ -89,8 +98,17 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: cinVerifyRes.statusCode || 400
                 });
             }
-            cinPatch = { cin_number: cin, is_cin_verified: true };
+            cinPatch = {
+                cin_number: cin,
+                is_cin_verified: true,
+                mca_verification_status: cinVerifyRes.data.verified ? VERIFICATION_STATUS.PASSED : VERIFICATION_STATUS.FAILED,
+                mca_registered_name: cinVerifyRes.data.companyName || null
+            };
         }
+    } else if (rules.cin !== 'required' && !isFilled(company.cin_number)) {
+        // Role doesn't require CIN and none was given (e.g. an investor with no fund
+        // entity) — nothing to check.
+        cinPatch = { mca_verification_status: VERIFICATION_STATUS.NOT_NEEDED };
     }
 
     const transaction = await sequelize.transaction();

@@ -262,7 +262,10 @@ const updateCompanyContact = async (companyId, data, { transaction } = {}) => {
  * Callers must have already verified the numbers and refused overwrites of
  * values that are already set. Only these columns are copied from `data`.
  */
-const COMPANY_IDENTIFIER_COLUMNS = ['gst_number', 'cin_number', 'is_gst_verified', 'is_cin_verified'];
+const COMPANY_IDENTIFIER_COLUMNS = [
+    'gst_number', 'cin_number', 'is_gst_verified', 'is_cin_verified',
+    'gst_verification_status', 'gst_registered_name', 'mca_verification_status', 'mca_registered_name'
+];
 
 const updateCompanyIdentifiers = async (companyId, data, { transaction } = {}) => {
     if (!companyId) return null;
