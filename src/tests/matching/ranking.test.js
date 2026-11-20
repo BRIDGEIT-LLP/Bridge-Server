@@ -6,8 +6,7 @@ const { calculateScore } = require('../../matching/scoringService');
 
 const startupProfile = {
     id: 1,
-    startup_industry_sector: ['fintech', 'saas'],
-    primary_sector: ['ai_ml'],
+    primary_sector: ['fintech', 'saas', 'ai_ml'],
     startup_intent: 'seed_investment',
     funding_ask_amt_min: 500000,
     funding_ask_amt_max: 2000000,
@@ -22,7 +21,7 @@ const startupProfile = {
 // High-match investor — same country, compatible intent, overlapping sectors & funding
 const highMatchInvestor = {
     id: 2,
-    investor_sector_preference: ['fintech', 'saas', 'ai_ml'],
+    primary_sector: ['fintech', 'saas', 'ai_ml'],
     investor_intent: 'actively_deploying',
     ticket_size_amt_min: 500000,
     ticket_size_amt_max: 3000000,
@@ -37,7 +36,7 @@ const highMatchInvestor = {
 // Medium-match investor — same continent, partial sector overlap, compatible intent
 const medMatchInvestor = {
     id: 3,
-    investor_sector_preference: ['fintech', 'gaming'],
+    primary_sector: ['fintech', 'gaming'],
     investor_intent: 'selectively_investing',
     ticket_size_amt_min: 2000000,
     ticket_size_amt_max: 8000000,
@@ -52,7 +51,7 @@ const medMatchInvestor = {
 // Low-match investor — different continent, incompatible intent, no sector overlap
 const lowMatchInvestor = {
     id: 4,
-    investor_sector_preference: ['gaming', 'consumer'],
+    primary_sector: ['gaming', 'consumer'],
     investor_intent: 'open_to_co_investment',
     ticket_size_amt_min: 10000000,
     ticket_size_amt_max: 50000000,

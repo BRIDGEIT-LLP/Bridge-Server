@@ -20,8 +20,7 @@ const { MATCHING_WEIGHTS } = require('../../matching/matchingConfig');
 
 const startupProfile = {
     id: 1,
-    startup_industry_sector: ['fintech', 'saas'],
-    primary_sector: ['ai_ml'],
+    primary_sector: ['fintech', 'supply_chain', 'logistics'],
     startup_intent: 'seed_investment',
     funding_ask_amt_min: 500000,
     funding_ask_amt_max: 2000000,
@@ -40,7 +39,7 @@ const startupProfile = {
 
 const investorProfile = {
     id: 2,
-    investor_sector_preference: ['fintech', 'healthtech'],
+    primary_sector: ['fintech', 'healthcare'],
     investor_intent: 'actively_deploying',
     ticket_size_amt_min: 1000000,
     ticket_size_amt_max: 5000000,
@@ -59,8 +58,8 @@ const investorProfile = {
 
 const b2bProfile = {
     id: 3,
-    b2b_sector: 'technology',
-    b2b_sub_sector: 'software_services',
+    primary_sector: ['packaging', 'manufacturing'],
+    b2b_sub_sector: 'Flexible packaging',
     industry_vertical: 'saas',
     b2b_intent: 'seeking_distributor',
     revenue_band: '1_10cr',
@@ -79,8 +78,8 @@ const b2bProfile = {
 
 const b2bProfile2 = {
     id: 4,
-    b2b_sector: 'technology',
-    b2b_sub_sector: 'software_services',
+    primary_sector: ['packaging', 'manufacturing'],
+    b2b_sub_sector: 'Flexible packaging',
     industry_vertical: 'saas',
     b2b_intent: 'seeking_supplier',
     revenue_band: '10_50cr',
@@ -121,18 +120,18 @@ describe('ScoringService — Helpers', () => {
     });
 
     describe('getSectorValues()', () => {
-        test('STARTUP returns combined startup_industry_sector + primary_sector', () => {
-            const vals = getSectorValues(startupProfile, 'STARTUP');
-            expect(vals).toContain('fintech');
-            expect(vals).toContain('ai_ml');
+        test.each([
+            ['STARTUP', startupProfile, ['fintech', 'supply_chain', 'logistics']],
+            ['INVESTOR', investorProfile, ['fintech', 'healthcare']],
+            ['B2B', b2bProfile, ['packaging', 'manufacturing']]
+        ])('%s returns primary_sector', (role, profile, expected) => {
+            expect(getSectorValues(profile, role)).toEqual(expected);
         });
-        test('INVESTOR returns investor_sector_preference', () => {
-            const vals = getSectorValues(investorProfile, 'INVESTOR');
-            expect(vals).toEqual(['fintech', 'healthtech']);
-        });
-        test('B2B returns b2b_sector as single-element array', () => {
-            const vals = getSectorValues(b2bProfile, 'B2B');
-            expect(vals).toEqual(['technology']);
+        test('ignores the legacy role-specific sector columns', () => {
+            const legacy = { investor_sector_preference: ['x'], startup_industry_sector: ['y'], b2b_sector: 'z' };
+            expect(getSectorValues(legacy, 'INVESTOR')).toEqual([]);
+            expect(getSectorValues(legacy, 'STARTUP')).toEqual([]);
+            expect(getSectorValues(legacy, 'B2B')).toEqual([]);
         });
         test('unknown role returns empty array', () => {
             expect(getSectorValues(startupProfile, 'UNKNOWN')).toEqual([]);
@@ -163,36 +162,38 @@ describe('ScoringService — Sector Score', () => {
         expect(score).toBeGreaterThan(0);
     });
     test('STARTUP↔INVESTOR: no sector overlap scores 0', () => {
-        const noOverlapInvestor = { ...investorProfile, investor_sector_preference: ['gaming'] };
+        const noOverlapInvestor = { ...investorProfile, primary_sector: ['textiles'] };
         const score = calculateSectorScore(startupProfile, noOverlapInvestor, 'STARTUP', 'INVESTOR');
         expect(score).toBe(0);
     });
-    test('B2B↔B2B: same sector and sub-sector scores 1.0', () => {
+    test('B2B↔B2B: identical sectors and sub-sector score 1.0', () => {
         const score = calculateSectorScore(b2bProfile, b2bProfile, 'B2B', 'B2B');
         expect(score).toBe(1.0);
     });
-    test('B2B↔B2B: same sector only scores 0.7', () => {
-        const diffSub = { ...b2bProfile2, b2b_sub_sector: 'hardware_electronics' };
+    test('B2B↔B2B: same sectors, different sub-sector scores the Jaccard value only', () => {
+        const diffSub = { ...b2bProfile2, b2b_sub_sector: 'Corrugated boxes' };
         const score = calculateSectorScore(b2bProfile, diffSub, 'B2B', 'B2B');
-        expect(score).toBe(0.7);
+        expect(score).toBe(1.0);
     });
-    test('B2B↔B2B: different sector scores 0', () => {
-        const otherB2b = { ...b2bProfile2, b2b_sector: 'agriculture_food', b2b_sub_sector: 'dairy' };
+    test('B2B↔B2B: partial sector overlap is scored by Jaccard', () => {
+        const partial = { ...b2bProfile2, primary_sector: ['packaging', 'textiles'], b2b_sub_sector: 'Corrugated boxes' };
+        const score = calculateSectorScore(b2bProfile, partial, 'B2B', 'B2B');
+        expect(score).toBeCloseTo(1 / 3, 5);
+    });
+    test('B2B↔B2B: matching free-text sub-sector adds a bonus (trimmed, case-insensitive)', () => {
+        const partial = { ...b2bProfile2, primary_sector: ['packaging', 'textiles'], b2b_sub_sector: '  flexible PACKAGING ' };
+        const score = calculateSectorScore(b2bProfile, partial, 'B2B', 'B2B');
+        expect(score).toBeCloseTo(1 / 3 + 0.3, 5);
+    });
+    test('B2B↔B2B: different sectors score 0 even if sub-sector matches', () => {
+        const otherB2b = { ...b2bProfile2, primary_sector: ['textiles'] };
         const score = calculateSectorScore(b2bProfile, otherB2b, 'B2B', 'B2B');
         expect(score).toBe(0);
     });
-    test('B2B↔STARTUP: cross-taxonomy match via CROSS_SECTOR_MAP scores > 0', () => {
-        // b2bProfile.b2b_sector = 'technology' → maps to ['saas','ai_ml','deeptech','fintech']
-        // startupProfile has 'fintech' and 'saas' → overlap
-        const score = calculateSectorScore(b2bProfile, startupProfile, 'B2B', 'STARTUP');
+    test('B2B↔STARTUP: shared sector list scores > 0 on overlap', () => {
+        const b2b = { ...b2bProfile, primary_sector: ['logistics'] };
+        const score = calculateSectorScore(b2b, startupProfile, 'B2B', 'STARTUP');
         expect(score).toBeGreaterThan(0);
-    });
-    test('B2B↔STARTUP: no cross-taxonomy overlap scores 0', () => {
-        const agriB2b = { ...b2bProfile, b2b_sector: 'agriculture_food' };
-        const finOnlyStartup = { ...startupProfile, startup_industry_sector: ['fintech'], primary_sector: [] };
-        // agriculture_food maps to agritech, consumer — no overlap with fintech
-        const score = calculateSectorScore(agriB2b, finOnlyStartup, 'B2B', 'STARTUP');
-        expect(score).toBe(0);
     });
 });
 
@@ -428,7 +429,7 @@ describe('ScoringService — calculateScore() total', () => {
         const { totalScore: highScore } = calculateScore(startupProfile, investorProfile, 'STARTUP', 'INVESTOR');
         const poorInvestor = {
             ...investorProfile,
-            investor_sector_preference: ['gaming'],
+            primary_sector: ['gaming'],
             investor_intent: 'selectively_investing',
             ticket_size_amt_min: 50000000,
             ticket_size_amt_max: 100000000,
