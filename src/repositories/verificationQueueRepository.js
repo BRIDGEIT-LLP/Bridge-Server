@@ -43,7 +43,7 @@ const SELECT_COLUMNS = `
 const FROM_JOINS = `
     FROM "user" u
     JOIN company c ON u.company_email = c.company_email
-    LEFT JOIN company_user_role cur ON cur.user_id = u.id AND cur.company_id = c.id AND cur.is_deleted IS NOT TRUE
+    LEFT JOIN company_user_role cur ON cur.user_id = u.id AND cur.company_id = c.id AND cur.is_deleted IS NOT TRUE AND cur.is_default_role IS TRUE
     LEFT JOIN company_role_master crm ON crm.id = cur.role_id
 `;
 
