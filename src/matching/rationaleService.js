@@ -26,10 +26,10 @@ const buildFactorSentence = (factor, score, maxWeight, sourceProfile, candidateP
 
     switch (factor) {
         case 'sector': {
-            const sector = candidateProfile.b2b_sector
-                || (candidateProfile.startup_industry_sector || [])[0]
-                || (candidateProfile.investor_sector_preference || [])[0]
-                || candidateProfile.primary_sector?.[0];
+            const candidateSectors = candidateProfile.primary_sector || [];
+            const sourceSectors = (sourceProfile.primary_sector || []).map(s => (s || '').toLowerCase());
+            const sector = candidateSectors.find(s => sourceSectors.includes((s || '').toLowerCase()))
+                || candidateSectors[0];
             if (sector && pct >= 0.8) return `Strong ${sector} sector alignment.`;
             if (sector && pct >= 0.4) return `Partial ${sector} sector overlap.`;
             return 'Related industry sectors identified.';

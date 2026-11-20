@@ -3,29 +3,18 @@
 const {
     MATCHING_WEIGHTS,
     INTENT_COMPATIBILITY,
-    CROSS_SECTOR_MAP,
     REVENUE_BAND_ORDER,
     COMPLETENESS_FIELDS
 } = require('./matchingConfig');
 const { calculateGeoScore } = require('./geoFilterService');
 
 /**
- * Returns the appropriate sector array for a profile based on its role.
+ * Returns the sector array for a profile. Every role stores its sectors in the
+ * shared `primary_sector` column (one common sector list for all roles).
  */
 const getSectorValues = (profile, roleCode) => {
-    switch (roleCode) {
-        case 'STARTUP':
-            return [
-                ...(profile.startup_industry_sector || []),
-                ...(profile.primary_sector || [])
-            ];
-        case 'INVESTOR':
-            return profile.investor_sector_preference || [];
-        case 'B2B':
-            return [profile.b2b_sector].filter(Boolean);
-        default:
-            return [];
-    }
+    if (!['STARTUP', 'INVESTOR', 'B2B'].includes(roleCode)) return [];
+    return (profile.primary_sector || []).filter(Boolean);
 };
 
 /**
@@ -56,50 +45,28 @@ const jaccardSimilarity = (arrA, arrB) => {
 /**
  * SECTOR MATCH (0.0 – 1.0)
  * 
- * Same-taxonomy (Startup↔Investor): Jaccard similarity on sector arrays.
- * Cross-taxonomy (B2B↔Startup/Investor): Uses CROSS_SECTOR_MAP to bridge.
- * B2B↔B2B: Exact match on b2b_sector with partial credit for sub-sector.
+ * All roles share one sector list stored in `primary_sector`, so every pair is
+ * scored with Jaccard similarity on those arrays.
+ * B2B↔B2B: a matching (free-text) sub-sector adds a bonus when sectors overlap.
  */
+const SUB_SECTOR_BONUS = 0.3;
+
+const normalizeText = (v) => (v || '').toString().trim().toLowerCase();
+
 const calculateSectorScore = (source, candidate, sourceRole, candidateRole) => {
     const sourceSectors    = getSectorValues(source, sourceRole);
     const candidateSectors = getSectorValues(candidate, candidateRole);
 
-    // Both are B2B — exact sector + sub-sector comparison
-    if (sourceRole === 'B2B' && candidateRole === 'B2B') {
-        let score = 0;
-        if (source.b2b_sector && candidate.b2b_sector &&
-            source.b2b_sector.toLowerCase() === candidate.b2b_sector.toLowerCase()) {
-            score = 0.7;
-            // Bonus for matching sub-sector
-            if (source.b2b_sub_sector && candidate.b2b_sub_sector &&
-                source.b2b_sub_sector.toLowerCase() === candidate.b2b_sub_sector.toLowerCase()) {
-                score = 1.0;
-            }
+    const score = jaccardSimilarity(sourceSectors, candidateSectors);
+
+    if (score > 0 && sourceRole === 'B2B' && candidateRole === 'B2B') {
+        const srcSub  = normalizeText(source.b2b_sub_sector);
+        const candSub = normalizeText(candidate.b2b_sub_sector);
+        if (srcSub && srcSub === candSub) {
+            return Math.min(score + SUB_SECTOR_BONUS, 1.0);
         }
-        return score;
     }
-
-    // Both use INDUSTRY_SECTORS (Startup↔Investor) — direct Jaccard
-    if ((sourceRole === 'STARTUP' || sourceRole === 'INVESTOR') &&
-        (candidateRole === 'STARTUP' || candidateRole === 'INVESTOR')) {
-        return jaccardSimilarity(sourceSectors, candidateSectors);
-    }
-
-    // Cross-taxonomy: one is B2B, the other is Startup/Investor
-    const b2bProfile    = sourceRole === 'B2B' ? source : candidate;
-    const nonB2bProfile = sourceRole === 'B2B' ? candidate : source;
-    const nonB2bRole    = sourceRole === 'B2B' ? candidateRole : sourceRole;
-
-    const b2bSector = (b2bProfile.b2b_sector || '').toLowerCase();
-    const mappedSectors = CROSS_SECTOR_MAP[b2bSector] || [];
-
-    if (!mappedSectors.length) return 0;
-
-    const otherSectors = getSectorValues(nonB2bProfile, nonB2bRole)
-        .map(s => (s || '').toLowerCase());
-
-    const overlap = mappedSectors.filter(s => otherSectors.includes(s));
-    return overlap.length > 0 ? Math.min(overlap.length / mappedSectors.length, 1.0) : 0;
+    return score;
 };
 
 /**

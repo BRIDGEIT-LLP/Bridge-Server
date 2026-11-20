@@ -72,32 +72,23 @@ const INTENT_COMPATIBILITY = {
                                     'seeking_export_buyer', 'seeking_manufacturing_partner']
 };
 
-// B2B sector → Startup/Investor sector mapping (cross-taxonomy bridge)
-const CROSS_SECTOR_MAP = {
-    'agriculture_food':  ['agritech', 'consumer'],
-    'technology':        ['saas', 'ai_ml', 'deeptech', 'fintech'],
-    'healthcare_pharma': ['healthtech'],
-    'manufacturing':     ['deeptech', 'logistics'],
-    'textiles_apparel':  ['consumer', 'ecommerce']
-};
-
 // Fields used to calculate profile completeness, per role
 const COMPLETENESS_FIELDS = {
     STARTUP: [
         'first_name', 'last_name', 'organization_name', 'profile_photo',
-        'short_bio', 'country', 'primary_sector', 'startup_industry_sector',
+        'short_bio', 'country', 'primary_sector',
         'funding_stage', 'funding_ask_amt_min', 'funding_ask_amt_max',
         'business_description', 'startup_intent', 'linkedin_profile_url'
     ],
     INVESTOR: [
         'first_name', 'last_name', 'organization_name', 'profile_photo',
-        'short_bio', 'country', 'investor_sector_preference',
+        'short_bio', 'country', 'primary_sector',
         'prefrerred_investment_stage', 'ticket_size_amt_min', 'ticket_size_amt_max',
         'investor_type', 'investor_intent', 'linkedin_profile_url'
     ],
     B2B: [
         'first_name', 'last_name', 'organization_name', 'profile_photo',
-        'short_bio', 'country', 'b2b_sector', 'b2b_sub_sector',
+        'short_bio', 'country', 'primary_sector', 'b2b_sub_sector',
         'revenue_band', 'min_order_quantity', 'export_rediness',
         'b2b_intent', 'linkedin_profile_url', 'products_ervice_Offered'
     ]
@@ -111,6 +102,5 @@ module.exports = {
     REVENUE_BAND_ORDER,
     GEO_SCORES,
     INTENT_COMPATIBILITY,
-    CROSS_SECTOR_MAP,
     COMPLETENESS_FIELDS
 };
