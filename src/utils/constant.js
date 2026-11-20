@@ -290,6 +290,37 @@ const KYC_STATUS = {
     APPROVED: 'Approved'
 };
 
+// Per-check result shown on the admin Verification queue (FRD §12.5). 'check' is distinct
+// from 'failed': the automated compare found a difference worth a human look, not a hard
+// mismatch (e.g. a GSTIN/MCA name that differs only by a middle name or spacing).
+const VERIFICATION_STATUS = {
+    NOT_NEEDED: 'not_needed',
+    WAITING: 'waiting',
+    PASSED: 'passed',
+    FAILED: 'failed',
+    CHECK: 'check'
+};
+
+// Predefined reasons for the Verification queue's reject dropdown (FRD §12.5, §4.7).
+// Keep in sync with Bridge-Web's VERIFICATION_REJECTION_REASONS.
+const VERIFICATION_REJECTION_REASONS = [
+    { code: 'GSTIN_CANCELLED', label: 'GSTIN cancelled or inactive' },
+    { code: 'NAME_MISMATCH', label: 'Name does not match GST/MCA/PAN records' },
+    { code: 'DOCUMENT_UNCLEAR', label: 'Document illegible or incomplete' },
+    { code: 'DOCUMENT_EXPIRED', label: 'Document expired' },
+    { code: 'INFORMATION_INCOMPLETE', label: 'Required information missing' },
+    { code: 'SUSPECTED_FRAUD', label: 'Suspected fraud' },
+    { code: 'OTHER', label: 'Other' }
+];
+
+const VERIFICATION_QUEUE_MESSAGES = {
+    LIST_SUCCESS: 'Verification queue fetched successfully.',
+    LIST_FAILED: 'Error encountered while fetching the verification queue.',
+    DETAIL_SUCCESS: 'Applicant details fetched successfully.',
+    DETAIL_FAILED: 'Error encountered while fetching applicant details.',
+    NOT_FOUND: 'Applicant not found.'
+};
+
 const REDIRECT_ROUTES = {
     REGISTRATION: {
         COMPANY_REGISTRATION: '/registration',
@@ -925,5 +956,6 @@ module.exports = { OTP_MESSAGES, OTP_PURPOSE, REGISTRATION_MESSAGES, AUTH_MESSAG
     DATA_TYPES, UNITS, ADMIN_CONFIG_MESSAGES, REDIS_BASE_KEYS, USER_SUSPENSION_MESSAGES,
     ADMIN_MANAGEMENT_MESSAGES, ADMIN_STATUS, ADMIN_ACTIVITY_ACTIONS, ADMIN_PERMISSION_KEYS, DASHBOARD_MESSAGES,
     ADMIN_PROFILE_MESSAGES, ROLE_SWITCH_MESSAGES, ADMIN_USER_DETAIL_MESSAGES, LOGIN_LOCKOUT_LIMITS,
-    KYC_REJECTION_LIMITS, BLOCK_REASONS, EMAIL_BLOCK_MESSAGES
+    KYC_REJECTION_LIMITS, BLOCK_REASONS, EMAIL_BLOCK_MESSAGES,
+    VERIFICATION_STATUS, VERIFICATION_REJECTION_REASONS, VERIFICATION_QUEUE_MESSAGES
 };

@@ -134,6 +134,10 @@ router.put('/kyc/document-action', adminMiddleware, authorize(PERMISSIONS.ADMIN_
 
 router.put('/kyc/review-action', adminMiddleware, authorize(PERMISSIONS.ADMIN_KYC.REVIEW_ACTION), adminController.kycReviewAction);
 
+router.get('/verification-queue', adminMiddleware, authorize(PERMISSIONS.ADMIN_USER.VIEW_KYC_DOCS), adminController.getVerificationQueue);
+
+router.get('/verification-queue/:companyId', adminMiddleware, authorize(PERMISSIONS.ADMIN_USER.VIEW_KYC_DOCS), adminController.getVerificationQueueDetail);
+
 // User limit config
 router.get('/users/:userId/limit-config', adminMiddleware, authorize(PERMISSIONS.ADMIN_USER_LIMIT.VIEW), adminController.getUserLimitConfig);
 

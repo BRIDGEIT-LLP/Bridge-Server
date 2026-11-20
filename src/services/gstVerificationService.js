@@ -14,10 +14,15 @@ const TOKEN_FALLBACK_TTL_SECONDS = 3300; // used only if the token has no readab
  * Fixed reference response (src/utils/gst-api-response.json), served whenever the
  * live sandbox.co.in call errors out or rejects the GSTIN, so the registration
  * flow isn't blocked by sandbox flakiness/account limits during this dev phase.
+ * `verified` on this payload stays `true` so existing callers (registration) are
+ * unaffected — `realOutcome` is the honest signal for callers (the Verification
+ * queue) that need to know this was a fallback, not a genuine pass. `rejected`
+ * means sandbox.co.in actually answered "not compliant"; `unknown` means the call
+ * itself failed/errored and we never got a real answer either way.
  */
-const buildHardcodedGstResult = () => ServiceResponse.success({
+const buildHardcodedGstResult = (realOutcome) => ServiceResponse.success({
     message: hardcodedGstResponse.message,
-    data: hardcodedGstResponse.data
+    data: { ...hardcodedGstResponse.data, realOutcome }
 });
 
 /**
@@ -89,7 +94,7 @@ const verifyGst = async (gstin, { allowRetry = true } = {}) => {
         const { verified, data: verifyResponseData } = await verifyGstinCompliance(gstin, accessToken);
 
         if (!verified) {
-            return buildHardcodedGstResult();
+            return buildHardcodedGstResult('rejected');
         }
 
         // sandbox.co.in nests the actual compliance fields two levels deep: { data: { data: {...} } }.
@@ -99,6 +104,7 @@ const verifyGst = async (gstin, { allowRetry = true } = {}) => {
             message: GST_MESSAGES.VERIFY_SUCCESS,
             data: {
                 verified: true,
+                realOutcome: 'passed',
                 gstin,
                 legalName: details.legalName || details.legal_name || details.lgnm || null,
                 tradeName: details.tradeName || details.trade_name || details.tradeNam || null,
@@ -126,7 +132,7 @@ const verifyGst = async (gstin, { allowRetry = true } = {}) => {
         // response rather than blocking the registration flow.
         errorLogger.error(`GST verification failed for ${gstin}, falling back to hardcoded response: ${error.message}`);
         console.error(`GST verification failed for ${gstin}:`, error.message);
-        return buildHardcodedGstResult();
+        return buildHardcodedGstResult('unknown');
     }
 };
 

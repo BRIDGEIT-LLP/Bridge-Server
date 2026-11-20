@@ -58,12 +58,20 @@ const fetchCinMasterData = async (cin, accessToken) => {
     return response.data;
 };
 
-const buildCinResult = (cin, responseData) => {
+/**
+ * `verified` stays `true` on a fallback (hardcoded fixture) call so existing callers
+ * (registration) are unaffected — `realOutcome` is the honest signal for callers (the
+ * Verification queue) that need to know this wasn't a genuine pass. The MCA lookup has
+ * no "not compliant" response shape like GST does — any non-200 throws — so the only
+ * fallback case here is `unknown` (the call itself failed and we never got a real answer).
+ */
+const buildCinResult = (cin, responseData, realOutcome) => {
     const details = responseData?.data?.company_master_data || {};
     return ServiceResponse.success({
         message: CIN_MESSAGES.VERIFY_SUCCESS,
         data: {
             verified: true,
+            realOutcome,
             cin,
             companyName: details.company_name || null,
             companyStatus: details['company_status(for_efiling)'] || null,
@@ -89,7 +97,7 @@ const verifyCin = async (cin, { allowRetry = true } = {}) => {
     try {
         const accessToken = await getAccessToken();
         const responseData = await fetchCinMasterData(cin, accessToken);
-        return buildCinResult(cin, responseData);
+        return buildCinResult(cin, responseData, 'passed');
     } catch (error) {
         const httpStatus = error.response?.status;
 
@@ -101,7 +109,7 @@ const verifyCin = async (cin, { allowRetry = true } = {}) => {
 
         errorLogger.error(`CIN verification failed for ${cin}, falling back to hardcoded response: ${error.message}`);
         console.error(`CIN verification failed for ${cin}:`, error.message);
-        return buildCinResult(cin, hardcodedCinResponse);
+        return buildCinResult(cin, hardcodedCinResponse, 'unknown');
     }
 };
 
