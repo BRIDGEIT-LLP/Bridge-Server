@@ -11,6 +11,21 @@ const { GST_MESSAGES, CIN_MESSAGES, KYC_STATUS, BUSINESS_CHECK_MESSAGES, VERIFIC
 
 const isFilled = (v) => typeof v === 'string' && v.trim() !== '';
 
+// Maps a verification service's honest `realOutcome` (see gstVerificationService /
+// cinVerificationService) to the Verification queue's status. `verified` on that
+// response is always true, even on the hardcoded fallback used to keep registration
+// unblocked during sandbox flakiness — `realOutcome` is what actually distinguishes
+// a genuine pass from a rejection or an unanswered check. 'rejected' only ever comes
+// from GST (sandbox explicitly said not compliant); CIN's lookup has no such response
+// shape, so it is only ever 'passed' or 'unknown'. An unrecognized/missing outcome
+// falls back to CHECK rather than silently passing.
+const REAL_OUTCOME_TO_STATUS = {
+    passed: VERIFICATION_STATUS.PASSED,
+    rejected: VERIFICATION_STATUS.FAILED,
+    unknown: VERIFICATION_STATUS.CHECK
+};
+const statusForOutcome = (realOutcome) => REAL_OUTCOME_TO_STATUS[realOutcome] ?? VERIFICATION_STATUS.CHECK;
+
 /**
  * What the "Check your business" step asks for, per role.
  *   B2B      - GSTIN + CIN, both required and verified here (PAN comes with the Documents step)
@@ -73,11 +88,17 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: gstVerifyRes.statusCode || 400
                 });
             }
+            // `is_gst_verified` stays true regardless of outcome — unchanged, pre-existing
+            // behaviour that the registration flow relies on. Only the new verification-queue
+            // fields reflect the real outcome, and the registered name is only ever saved on a
+            // genuine pass — never the hardcoded fallback's fabricated name.
             gstPatch = {
                 gst_number: gst,
                 is_gst_verified: true,
-                gst_verification_status: gstVerifyRes.data.verified ? VERIFICATION_STATUS.PASSED : VERIFICATION_STATUS.FAILED,
-                gst_registered_name: gstVerifyRes.data.legalName || gstVerifyRes.data.tradeName || null
+                gst_verification_status: statusForOutcome(gstVerifyRes.data.realOutcome),
+                gst_registered_name: gstVerifyRes.data.realOutcome === 'passed'
+                    ? gstVerifyRes.data.legalName || gstVerifyRes.data.tradeName || null
+                    : null
             };
         }
     } else if (rules.gst === 'none') {
@@ -98,11 +119,15 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: cinVerifyRes.statusCode || 400
                 });
             }
+            // Same reasoning as the GST branch above — `is_cin_verified` is unchanged,
+            // only the new fields honour the real outcome.
             cinPatch = {
                 cin_number: cin,
                 is_cin_verified: true,
-                mca_verification_status: cinVerifyRes.data.verified ? VERIFICATION_STATUS.PASSED : VERIFICATION_STATUS.FAILED,
-                mca_registered_name: cinVerifyRes.data.companyName || null
+                mca_verification_status: statusForOutcome(cinVerifyRes.data.realOutcome),
+                mca_registered_name: cinVerifyRes.data.realOutcome === 'passed'
+                    ? cinVerifyRes.data.companyName || null
+                    : null
             };
         }
     } else if (rules.cin !== 'required' && !isFilled(company.cin_number)) {
