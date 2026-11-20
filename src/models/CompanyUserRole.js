@@ -70,6 +70,26 @@ module.exports = (sequelize) => {
             allowNull: true
         },
 
+        // PAN verification result for this person (FRD §12.5 Verification queue). PAN has
+        // no live check yet, so this stays at its default until that integration is built.
+        pan_verification_status: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: 'waiting'
+        },
+        pan_registered_name: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
+        // Free text from the registration "Who vouched for you?" field. No vouch/referral
+        // system exists yet (FRD §3.7/§12.7) — this is a display-only name, not a member
+        // link, and stays null until registration is wired to persist it.
+        vouched_by_name: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
         approved_by: {
             type: DataTypes.UUID,
             allowNull: true,

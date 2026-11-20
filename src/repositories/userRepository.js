@@ -128,18 +128,20 @@ const getCompanyUser_role = async (companyId, userId) => {
 
 const getUserList = async () => {
     return await sequelize.query(
-        `select 
+        `select
             u.id as user_id,
-            u.first_name, 
-            u.last_name, 
+            u.first_name,
+            u.last_name,
             u.profile_photo,
+            u.city,
+            u.created_at as joined_at,
             c.id as company_id,
-            c.company_email, 
-            c.company_name, 
-            c.country_code, 
-            c.mobile_number, 
-            c.is_email_verified, 
-            c.is_mobile_number_verified, 
+            c.company_email,
+            c.company_name,
+            c.country_code,
+            c.mobile_number,
+            c.is_email_verified,
+            c.is_mobile_number_verified,
             c.kyc_status,
             EXISTS (
                 SELECT 1
@@ -150,10 +152,18 @@ const getUserList = async () => {
             ) AS has_kyc_documents,
             u.is_active,
             u.is_user_suspended,
-            (select crm.role_code from company_role_master crm where id = cur.role_id) as role
-        from "user" u 
-        join company c on u.company_email = c.company_email 
+            (select crm.role_code from company_role_master crm where id = cur.role_id) as role,
+            sub.status as subscription_status
+        from "user" u
+        join company c on u.company_email = c.company_email
         join company_user_role cur on cur.company_id = c.id and cur.user_id = u.id
+        left join lateral (
+            select status
+            from user_subscription
+            where user_id = u.id and is_deleted is not true
+            order by created_at desc
+            limit 1
+        ) sub on true
         where u.is_deleted is not true and c.is_deleted is not true and cur.is_default_role is true`,
         {
             replacements: { kycDocTypes: KYC_DOC_TYPES },

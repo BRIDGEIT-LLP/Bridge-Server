@@ -7,9 +7,24 @@ const gstVerificationService = require('./gstVerificationService');
 const ServiceResponse = require('../utils/ServiceResponse');
 const { errorLogger } = require('../configs/logger');
 const { encrypt, decrypt } = require('../utils/encryption');
-const { GST_MESSAGES, CIN_MESSAGES, KYC_STATUS, BUSINESS_CHECK_MESSAGES } = require('../utils/constant');
+const { GST_MESSAGES, CIN_MESSAGES, KYC_STATUS, BUSINESS_CHECK_MESSAGES, VERIFICATION_STATUS } = require('../utils/constant');
 
 const isFilled = (v) => typeof v === 'string' && v.trim() !== '';
+
+// Maps a verification service's honest `realOutcome` (see gstVerificationService /
+// cinVerificationService) to the Verification queue's status. `verified` on that
+// response is always true, even on the hardcoded fallback used to keep registration
+// unblocked during sandbox flakiness — `realOutcome` is what actually distinguishes
+// a genuine pass from a rejection or an unanswered check. 'rejected' only ever comes
+// from GST (sandbox explicitly said not compliant); CIN's lookup has no such response
+// shape, so it is only ever 'passed' or 'unknown'. An unrecognized/missing outcome
+// falls back to CHECK rather than silently passing.
+const REAL_OUTCOME_TO_STATUS = {
+    passed: VERIFICATION_STATUS.PASSED,
+    rejected: VERIFICATION_STATUS.FAILED,
+    unknown: VERIFICATION_STATUS.CHECK
+};
+const statusForOutcome = (realOutcome) => REAL_OUTCOME_TO_STATUS[realOutcome] ?? VERIFICATION_STATUS.CHECK;
 
 /**
  * What the "Check your business" step asks for, per role.
@@ -56,7 +71,9 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
         });
     }
 
-    // GSTIN: only roles that ask for it; anyone else sending one is ignored.
+    // GSTIN: only roles that ask for it; anyone else sending one is ignored. Verification
+    // queue (FRD §12.5) columns are set from the same live sandbox.co.in response so the
+    // reviewer sees a real result instead of a placeholder.
     let gstPatch = null;
     if (gst && rules.gst !== 'none') {
         if (isFilled(company.gst_number)) {
@@ -71,8 +88,21 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: gstVerifyRes.statusCode || 400
                 });
             }
-            gstPatch = { gst_number: gst, is_gst_verified: true };
+            // `is_gst_verified` stays true regardless of outcome — unchanged, pre-existing
+            // behaviour that the registration flow relies on. Only the new verification-queue
+            // fields reflect the real outcome, and the registered name is only ever saved on a
+            // genuine pass — never the hardcoded fallback's fabricated name.
+            gstPatch = {
+                gst_number: gst,
+                is_gst_verified: true,
+                gst_verification_status: statusForOutcome(gstVerifyRes.data.realOutcome),
+                gst_registered_name: gstVerifyRes.data.realOutcome === 'passed'
+                    ? gstVerifyRes.data.legalName || gstVerifyRes.data.tradeName || null
+                    : null
+            };
         }
+    } else if (rules.gst === 'none') {
+        gstPatch = { gst_verification_status: VERIFICATION_STATUS.NOT_NEEDED };
     }
 
     let cinPatch = null;
@@ -89,8 +119,21 @@ const saveBusinessCheck = async ({ userId, companyId, roleId, role, body, draft 
                     statusCode: cinVerifyRes.statusCode || 400
                 });
             }
-            cinPatch = { cin_number: cin, is_cin_verified: true };
+            // Same reasoning as the GST branch above — `is_cin_verified` is unchanged,
+            // only the new fields honour the real outcome.
+            cinPatch = {
+                cin_number: cin,
+                is_cin_verified: true,
+                mca_verification_status: statusForOutcome(cinVerifyRes.data.realOutcome),
+                mca_registered_name: cinVerifyRes.data.realOutcome === 'passed'
+                    ? cinVerifyRes.data.companyName || null
+                    : null
+            };
         }
+    } else if (rules.cin !== 'required' && !isFilled(company.cin_number)) {
+        // Role doesn't require CIN and none was given (e.g. an investor with no fund
+        // entity) — nothing to check.
+        cinPatch = { mca_verification_status: VERIFICATION_STATUS.NOT_NEEDED };
     }
 
     const transaction = await sequelize.transaction();

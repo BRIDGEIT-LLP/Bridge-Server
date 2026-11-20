@@ -5,7 +5,7 @@ const {
     ADMIN_MESSAGES, OTP_MESSAGES, OTP_PURPOSE, CHANNEL_TYPE, REDIRECT_ROUTES, KYC_MESSAGES,
     USER_LIMIT_CONFIG_MESSAGES, TOKEN_TYPES, USER_TYPES, SESSION_MESSAGES,
     USER_SUSPENSION_MESSAGES, ROLE_SWITCH_MESSAGES, USER_MESSAGES, ADMIN_PROFILE_MESSAGES,
-    ADMIN_USER_DETAIL_MESSAGES
+    ADMIN_USER_DETAIL_MESSAGES, VERIFICATION_QUEUE_MESSAGES
 } = require('../utils/constant');
 const HttpResponse = require('../utils/HttpResponse');
 const { isValidUUID } = require('../utils/Helper');
@@ -14,6 +14,7 @@ const adminService = require('../services/adminService');
 const otpService = require('../services/otp.service');
 const userService = require('../services/userService');
 const kycService = require('../services/kycService');
+const verificationQueueService = require('../services/verificationQueueService');
 const { COOKIE_NAMES, cookieOptions, clearCookieOptions, generateAccessToken, generateRefreshToken } = require('../utils/token');
 const env = require('../configs/env_configs');
 const { NATIONAL_NUMBER_PATTERN } = require('../utils/phoneValidation');
@@ -382,6 +383,37 @@ const kycReviewAction = async (req, res, next) => {
     }
 };
 
+const getVerificationQueue = async (req, res, next) => {
+    try {
+        const result = await verificationQueueService.getVerificationQueueList();
+        if (!result.success) {
+            return HttpResponse.error(res, { message: result.message, statusCode: result.statusCode });
+        }
+        return HttpResponse.success(res, { message: result.message, data: result.data, statusCode: 200 });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, { message: VERIFICATION_QUEUE_MESSAGES.LIST_FAILED, statusCode: 500 });
+    }
+};
+
+const getVerificationQueueDetail = async (req, res, next) => {
+    try {
+        const { companyId } = req.params;
+        if (!isValidUUID(companyId)) {
+            return HttpResponse.error(res, { message: 'A valid companyId is required.', statusCode: 400 });
+        }
+
+        const result = await verificationQueueService.getVerificationQueueDetail(companyId);
+        if (!result.success) {
+            return HttpResponse.error(res, { message: result.message, statusCode: result.statusCode });
+        }
+        return HttpResponse.success(res, { message: result.message, data: result.data, statusCode: 200 });
+    } catch (error) {
+        errorLogger.error(error);
+        return HttpResponse.error(res, { message: VERIFICATION_QUEUE_MESSAGES.DETAIL_FAILED, statusCode: 500 });
+    }
+};
+
 const getUserLimitConfig = async (req, res, next) => {
     try {
         const { userType } = req;
@@ -674,6 +706,8 @@ module.exports = {
     getUserKycDocs,
     kycDocumentAction,
     kycReviewAction,
+    getVerificationQueue,
+    getVerificationQueueDetail,
     getUserLimitConfig,
     updateUserLimitConfig,
     updateUserSuspension,

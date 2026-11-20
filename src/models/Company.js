@@ -146,6 +146,38 @@ module.exports = (sequelize) => {
             defaultValue: 0
         },
 
+        // Per-check results for the admin Verification queue (FRD §12.5). Values are
+        // VERIFICATION_STATUS ('not_needed' | 'waiting' | 'passed' | 'failed' | 'check').
+        // GST/MCA are set by businessCheckService from the live sandbox.co.in response;
+        // name_match_status/note stay 'waiting' until the name-match feature is built.
+        gst_verification_status: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: 'waiting'
+        },
+        gst_registered_name: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        mca_verification_status: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: 'waiting'
+        },
+        mca_registered_name: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        name_match_status: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: 'waiting'
+        },
+        name_match_note: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+
         failed_login_attempts: {
             type: DataTypes.INTEGER,
             allowNull: false,
