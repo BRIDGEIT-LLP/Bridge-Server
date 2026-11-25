@@ -37,7 +37,8 @@ const SELECT_COLUMNS = `
     u.funding_currency,
     u.ticket_size_amt_min,
     u.ticket_size_amt_max,
-    u.ticket_currency
+    u.ticket_currency,
+    u.revenue_band
 `;
 
 const FROM_JOINS = `
