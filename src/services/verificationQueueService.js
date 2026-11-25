@@ -40,7 +40,8 @@ const toListItem = (row) => ({
         currency: row.funding_currency,
         ticketSizeMin: row.ticket_size_amt_min,
         ticketSizeMax: row.ticket_size_amt_max,
-        ticketCurrency: row.ticket_currency
+        ticketCurrency: row.ticket_currency,
+        revenueBand: row.revenue_band
     }
 });
 
