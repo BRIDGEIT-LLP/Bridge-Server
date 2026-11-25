@@ -273,10 +273,10 @@ const KYC_COMPANY_NUMBER_FIELD = {
 // (PAN comes from the Business step), 'company' = the company's verified GSTIN/CIN, 'none' = no number.
 const IMAGE_MIME = ['image/png', 'image/jpeg'];
 const KYC_DOC_SPECS = {
-    PAN: { label: 'PAN card', numberLabel: 'PAN number', numberSource: 'user', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 5 },
-    AADHAAR: { label: 'Aadhaar card', numberLabel: 'Aadhaar number', numberSource: 'user', sides: ['front', 'back'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 5 },
-    GST_CERTIFICATE: { label: 'GST registration certificate', numberLabel: 'GSTIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 20 },
-    INCORPORATION_CERTIFICATE: { label: 'Certificate of incorporation', numberLabel: 'CIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 20 },
+    PAN: { label: 'PAN card', numberLabel: 'PAN number', numberSource: 'user', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 10 },
+    AADHAAR: { label: 'Aadhaar card', numberLabel: 'Aadhaar number', numberSource: 'user', sides: ['front', 'back'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 10 },
+    GST_CERTIFICATE: { label: 'GST registration certificate', numberLabel: 'GSTIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 10 },
+    INCORPORATION_CERTIFICATE: { label: 'Certificate of incorporation', numberLabel: 'CIN', numberSource: 'company', sides: ['front'], mimeTypes: [...IMAGE_MIME, 'application/pdf'], maxSizeMB: 10 },
     PITCH_DECK: { label: 'Pitch deck', numberLabel: null, numberSource: 'none', sides: ['front'], mimeTypes: ['application/pdf'], maxSizeMB: 20 }
 };
 // Role-specific wording for the same document.
