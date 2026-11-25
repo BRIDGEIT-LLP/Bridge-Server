@@ -3,7 +3,7 @@ const { uploadToBucket, getFileBuffer, getFileUrl } = require("../services/s3.se
 const { scanUploadedFile } = require("../services/scan.service");
 const { addPdfWatermark, addImageWatermark, docxToWatermarkedHtml, excelToWatermarkedHtml, pptToWatermarkedHtml } = require("../services/watermark.service");
 const kycService = require('../services/kycService');
-const { S3_FILE_TYPE, KYC_DOC_TYPES, DEFAULT_KYC_VERIFICATION_APPROVAL_TIME, KYC_STATUS, DRAFT_STEPS, DRAFT_MESSAGES } = require("../utils/constant");
+const { S3_FILE_TYPE, KYC_DOC_TYPES, KYC_DOC_SPECS,DEFAULT_KYC_VERIFICATION_APPROVAL_TIME, KYC_STATUS, DRAFT_STEPS, DRAFT_MESSAGES } = require("../utils/constant");
 const companyRepository = require("../repositories/companyRepository");
 const { waterMarkFunction } = require("../utils/Helper");
 const HttpResponse = require("../utils/HttpResponse");
@@ -36,6 +36,15 @@ const scanFile = async (req, res, next) => {
         if (!req.file) {
             return HttpResponse.error(res, {
                 message: "File is required",
+                statusCode: 400
+            });
+        }
+
+        // Per-document size limit (multer only enforces a blanket ceiling per endpoint)
+        const maxMB = docType === "PROFILE_PHOTO" ? 5 : KYC_DOC_SPECS[docType]?.maxSizeMB;
+        if (maxMB && req.file.size > maxMB * 1024 * 1024) {
+            return HttpResponse.error(res, {
+                message: `File must be ${maxMB} MB or smaller.`,
                 statusCode: 400
             });
         }
