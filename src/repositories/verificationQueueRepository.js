@@ -52,7 +52,7 @@ const FROM_JOINS = `
 const getVerificationQueueList = async () => {
     return await sequelize.query(
         `SELECT ${SELECT_COLUMNS} ${FROM_JOINS}
-         WHERE u.is_deleted IS NOT TRUE AND c.kyc_status = :kycStatus
+         WHERE u.is_deleted IS NOT TRUE AND c.kyc_status = :kycStatus AND c.is_kyc_uploaded IS TRUE
          ORDER BY c.created_at ASC`,
         {
             replacements: { kycStatus: KYC_STATUS.PENDING },
@@ -64,7 +64,7 @@ const getVerificationQueueList = async () => {
 const getVerificationQueueDetail = async (companyId) => {
     const rows = await sequelize.query(
         `SELECT ${SELECT_COLUMNS} ${FROM_JOINS}
-         WHERE u.is_deleted IS NOT TRUE AND c.id = :companyId
+         WHERE u.is_deleted IS NOT TRUE AND c.id = :companyId AND c.is_kyc_uploaded IS TRUE
          LIMIT 1`,
         {
             replacements: { companyId },
