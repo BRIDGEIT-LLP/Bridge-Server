@@ -7,7 +7,7 @@ const HttpResponse = require('../utils/HttpResponse');
 
 const sendConnectionRequest = async (req, res, next) => {
     try {
-        const { recipientUserId, recipientRoleId, recipientCompanyId, personalMessage, bussinessIntent, expectedDealSize, productServiceDetails } = req.body;
+        const { recipientUserId, recipientRoleId, recipientCompanyId, personalMessage, bussinessIntent, expectedDealSize, productServiceDetails, matchRationale, matchPercentage } = req.body;
         const { userId, roleId, companyId, role } = req;
 
         // 1. Find whether user has an active subscription
@@ -56,7 +56,9 @@ const sendConnectionRequest = async (req, res, next) => {
             personalMessage, 
             bussinessIntent, 
             expectedDealSize, 
-            productServiceDetails
+            productServiceDetails,
+            matchRationale,
+            matchPercentage
         });
         if (!result.success) {
             return HttpResponse.error(res, { message: result.message, statusCode: result.statusCode });

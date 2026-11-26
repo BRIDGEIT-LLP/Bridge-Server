@@ -61,8 +61,12 @@ const findById = async (connectionId) => {
 };
 
 const updateStatus = async (connectionId, status, reason, { transaction } = {}) => {
+    // The reason is only meaningful (and only stored) when a request is declined
+    const declineReason = status === CONNECTION_STATUS.DECLINED && typeof reason === 'string' && reason.trim()
+        ? reason.trim().slice(0, 500)
+        : null;
     const [, [updated]] = await UserConnection.update(
-        { status, updated_at: new Date() },
+        { status, updated_at: new Date(), ...(declineReason ? { reason: declineReason } : {}) },
         { where: { id: connectionId }, returning: true, transaction }
     );
     return updated;
@@ -87,6 +91,8 @@ const findSentByUser = async (userId, roleId) => {
             uc.id AS connection_id,
             uc.status AS connection_status,
             uc.product_service_details,
+            uc.match_reason,
+            uc.match_percentage,
             uc.expected_deal_size,
             uc.bussiness_intent,
             uc.message AS connection_message,
@@ -101,6 +107,7 @@ const findSentByUser = async (userId, roleId) => {
             rec_u.first_name AS recipient_first_name,
             rec_u.last_name AS recipient_last_name,
             rec_u.profile_photo AS recipient_profile_photo,
+            rec_u.city AS recipient_city,
             uc.recipient_role_id,
             rec_crm.role_code AS recipient_role_code,
             rec_crm.role_name AS recipient_role_name,
@@ -116,7 +123,7 @@ const findSentByUser = async (userId, roleId) => {
         WHERE uc.is_deleted IS NOT TRUE
         AND uc.requester_user_id = :userId
         AND uc.requester_role_id = :roleId
-        AND uc.status in ('${CONNECTION_STATUS.PENDING}', '${CONNECTION_STATUS.VIEWED}', '${CONNECTION_STATUS.DEFERRED}', '${CONNECTION_STATUS.WITHDRAWN}')
+        AND uc.status in ('${CONNECTION_STATUS.PENDING}', '${CONNECTION_STATUS.VIEWED}', '${CONNECTION_STATUS.DEFERRED}', '${CONNECTION_STATUS.WITHDRAWN}', '${CONNECTION_STATUS.DECLINED}')
 
         ORDER BY uc.created_at desc`,
         {
@@ -132,6 +139,9 @@ const findReceivedByUser = async (userId, roleId) => {
             uc.id AS connection_id,
             uc.status AS connection_status,
             uc.product_service_details,
+            uc.match_reason,
+            uc.match_percentage,
+            uc.reason AS decline_reason,
             uc.expected_deal_size,
             uc.bussiness_intent,
             uc.message AS connection_message,
@@ -142,6 +152,7 @@ const findReceivedByUser = async (userId, roleId) => {
             req_u.first_name AS requester_first_name,
             req_u.last_name AS requester_last_name,
             req_u.profile_photo AS requester_profile_photo,
+            req_u.city AS requester_city,
             uc.requester_role_id,
             req_crm.role_code AS requester_role_code,
             req_crm.role_name AS requester_role_name,

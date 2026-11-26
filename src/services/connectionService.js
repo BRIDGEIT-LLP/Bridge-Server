@@ -86,7 +86,7 @@ const validateConnectionLimit = async (userId, requestCount, hasActiveSubscripti
     return ServiceResponse.success({ statusCode: 200 });
 };
 
-const sendRequest = async ({ requesterUserId, requesterRoleId, requesterCompanyId, requesterRoleCode, recipientUserId, recipientRoleId, recipientCompanyId, personalMessage, bussinessIntent, expectedDealSize, productServiceDetails }) => {
+const sendRequest = async ({ requesterUserId, requesterRoleId, requesterCompanyId, requesterRoleCode, recipientUserId, recipientRoleId, recipientCompanyId, personalMessage, bussinessIntent, expectedDealSize, productServiceDetails, matchRationale, matchPercentage }) => {
     const transaction = await sequelize.transaction();
     try {
         // 1. Check recipient user exists
@@ -136,6 +136,8 @@ const sendRequest = async ({ requesterUserId, requesterRoleId, requesterCompanyI
             bussiness_intent: bussinessIntent || null,
             expected_deal_size: expectedDealSize || null,
             product_service_details: productServiceDetails || null,
+            match_reason: (typeof matchRationale === 'string' && matchRationale.trim()) ? matchRationale.trim().slice(0, 1000) : null,
+            match_percentage: Number.isInteger(matchPercentage) && matchPercentage >= 0 && matchPercentage <= 100 ? matchPercentage : null,
             created_by: requesterUserId
         }, { transaction });
 

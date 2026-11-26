@@ -31,6 +31,15 @@ const sendConnectionRequestSchema = Joi.object({
     }),
     productServiceDetails: Joi.string().max(500).optional().allow(null, '').messages({
         'string.max': 'productServiceDetails must not exceed 500 characters'
+    }),
+    matchRationale: Joi.string().max(1000).optional().allow(null, '').messages({
+        'string.max': 'matchRationale must not exceed 1000 characters'
+    }),
+    matchPercentage: Joi.number().integer().min(0).max(100).optional().allow(null).messages({
+        'number.base': 'matchPercentage must be a number',
+        'number.integer': 'matchPercentage must be a whole number',
+        'number.min': 'matchPercentage must be between 0 and 100',
+        'number.max': 'matchPercentage must be between 0 and 100'
     })
 });
 
