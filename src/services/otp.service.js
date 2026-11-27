@@ -41,10 +41,13 @@ const sendOtpToEmail = async (email, otp) => {
             html: buildOtpEmailHtml(otp),
             text: buildOtpEmailText(otp),
         });
+        return ServiceResponse.success({ message: OTP_MESSAGES.OTP_SEND_SUCCESS });
     } catch (err) {
+        // Delivery failure must not fail the API: the OTP is already stored in Redis
+        // and is also returned in the response, so the user can still verify.
         errorLogger.error(`Error sending OTP to email ${email}:`, err);
         console.error(`Error sending OTP to email ${email}:`, err);
-        throw new Error("Failed to send OTP");
+        return ServiceResponse.error({ message: 'Failed to send OTP', statusCode: 502 });
     }
 };
 
@@ -94,6 +97,8 @@ const sendOTP = async (channelType, channelId, purpose) => {
             // TODO:- Remove hardcoded phone number and use channelId instead after testing
             // await sendOtpToPhone("+91" + channelId, otp);
         } else {
+            // Best-effort: an error response from sendOtpToEmail (already logged there)
+            // is deliberately not propagated, so the API does not fail.
             await sendOtpToEmail(channelId, otp);
         }
 
