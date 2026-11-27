@@ -3,7 +3,7 @@ const redis = require("../configs/redis.js");
 const { OTP_MESSAGES } = require("../utils/constant.js");
 const { generateOTP } = require("../utils/Helper.js");
 const { smsClient } = require("../configs/twilio.js");
-const { sgMailClient } = require("../configs/twilio.js");
+const { sendEmail } = require("./email.service.js");
 const ServiceResponse = require("../utils/ServiceResponse.js");
 const { errorLogger } = require("../configs/logger.js");
 const { CHANNEL_TYPE } = require("../utils/constant.js")
@@ -24,22 +24,30 @@ const sendOtpToPhone = async (phone, otp) => {
     }
 };
 
+const OTP_EMAIL_SUBJECT = 'Bridge OTP Verification';
+
+const buildOtpEmailHtml = (otp) => `<p>Your OTP is <strong>${otp}</strong></p>`;
+const buildOtpEmailText = (otp) => `Your OTP is ${otp}`;
+
 const sendOtpToEmail = async (email, otp) => {
     try {
-        const msg = {
+        // Message content is decided here; email.service only delivers it
+        // (provider comes from EMAIL_PROVIDER env, default SES).
+        const fromEmail = process.env.SES_FROM_EMAIL;
+        await sendEmail({
+            from: fromEmail,
             to: email,
-            from: {
-                name: "Bridge Support",
-                email: process.env.SENDGRID_EMAIL_FROM
-            },
-            subject: "Bridge OTP Verification",
-            html: `<p>Your OTP is <strong>${otp}</strong></p>`,
-        };
-        await sgMailClient.send(msg);
+            subject: OTP_EMAIL_SUBJECT,
+            html: buildOtpEmailHtml(otp),
+            text: buildOtpEmailText(otp),
+        });
+        return ServiceResponse.success({ message: OTP_MESSAGES.OTP_SEND_SUCCESS });
     } catch (err) {
+        // Delivery failure must not fail the API: the OTP is already stored in Redis
+        // and is also returned in the response, so the user can still verify.
         errorLogger.error(`Error sending OTP to email ${email}:`, err);
         console.error(`Error sending OTP to email ${email}:`, err);
-        throw new Error("Failed to send OTP");
+        return ServiceResponse.error({ message: 'Failed to send OTP', statusCode: 502 });
     }
 };
 
@@ -89,7 +97,9 @@ const sendOTP = async (channelType, channelId, purpose) => {
             // TODO:- Remove hardcoded phone number and use channelId instead after testing
             // await sendOtpToPhone("+91" + channelId, otp);
         } else {
-            // await sendOtpToEmail(channelId, otp);
+            // Best-effort: an error response from sendOtpToEmail (already logged there)
+            // is deliberately not propagated, so the API does not fail.
+            await sendOtpToEmail(channelId, otp);
         }
 
         // 8. Increment OTP resent count

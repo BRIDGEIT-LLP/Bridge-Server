@@ -26,6 +26,10 @@ jest.mock('../../configs/twilio', () => ({
     sgMailClient: { send: jest.fn() }
 }));
 
+jest.mock('../../services/email.service', () => ({
+    sendEmail: jest.fn().mockResolvedValue('mock-message-id')
+}));
+
 jest.mock('../../configs/logger', () => ({
     errorLogger: { error: jest.fn() }
 }));
