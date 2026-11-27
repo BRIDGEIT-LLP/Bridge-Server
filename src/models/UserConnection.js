@@ -93,6 +93,18 @@ module.exports = (sequelize) => {
             allowNull: true
         },
 
+        // Why the matching engine suggested this pair (shown to the recipient)
+        match_reason: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+
+        // Matching-engine compatibility score (0-100) at the time the request was sent
+        match_percentage: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+
         reason: {
             type: DataTypes.STRING,
             allowNull: true
